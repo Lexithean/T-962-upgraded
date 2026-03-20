@@ -120,6 +120,14 @@ void Reflow_ValidateNV(void) {
 		printf("Resetting bake setpoint to default.");
 	}
 
+	if (NV_GetConfig(REFLOW_PREHEAT_TEMP) == 255) {
+		NV_SetConfig(REFLOW_PREHEAT_TEMP, 20); // Default 50C (20 + 30 offset)
+	}
+
+	if (NV_GetConfig(REFLOW_BANGBANG_MODE) == 255) {
+		NV_SetConfig(REFLOW_BANGBANG_MODE, 1); // Default ON (bang-bang)
+	}
+
 	Reflow_SelectProfileIdx(NV_GetConfig(REFLOW_PROFILE));
 }
 
