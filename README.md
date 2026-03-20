@@ -29,7 +29,7 @@ This fork merges the following improvements from upstream pull requests that wer
 
 ### Stability & Compatibility
 - **LCD buffer overflow fix** — Prevents crashes from long strings (#245)
-- **DS18S20 support** — Handles the older DS18S20 1-wire temperature sensor variant (#148)
+- **1-wire temperature sensor support** — DS18B20, DS18S20, and DS1822 all supported for cold junction compensation (#148)
 - **Binary serial command interface** — CRC-validated protocol for uploading custom profiles via UART (#136)
 - **PlatformIO support** — Build with `pio run` in addition to `make` (#207)
 
@@ -47,7 +47,7 @@ Here are a few improvements made to the T-962 reflow oven utilizing the _existin
 Instructable suggesting [replacing masking tape with kapton tape](http://www.instructables.com/id/T962A-SMD-Reflow-Oven-FixHack/?ALLSTEPS).
 
 #### Cold junction compensation
-The factory firmware assumes a 20°C cold-junction at all times. Add a [DS18B20] temperature sensor to the TC terminal block for proper compensation. See the [wiki](https://github.com/Lexithean/T-962-upgraded/wiki) for full instructions.
+The factory firmware assumes a 20°C cold-junction at all times. Add a 1-wire temperature sensor to the TC terminal block for proper compensation. Compatible sensors: **DS18B20** (recommended), **DS18S20**, or **DS1822**. See the [wiki](https://github.com/Lexithean/T-962-upgraded/wiki) for installation instructions and the [Troubleshooting](https://github.com/Lexithean/T-962-upgraded/wiki/Troubleshooting) page for wiring details.
 
 #### Check mains earth connection
 Make sure the protective earth wire makes contact with the back panel and that both halves of the oven chassis are connected.
