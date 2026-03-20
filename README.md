@@ -1,4 +1,4 @@
-﻿T-962 reflow oven improvements
+T-962 reflow oven improvements
 ==============================
 Custom firmware for the cheap T-962 reflow oven utilizing the _existing_ controller hardware.
 

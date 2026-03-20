@@ -81,8 +81,16 @@ static int32_t Reflow_Work(void) {
 		modestr = "BAKE";
 
 	} else if(mymode == REFLOW_REFLOW) {
-		reflowdone = Reflow_Run(ticks, avgtemp, &heat, &fan, 0) ? 1 : 0;
-		modestr = "REFLOW";
+		int preheat_temp = NV_GetConfig(REFLOW_PREHEAT_TEMP) + 30;
+		if (preheat_temp > 30 && avgtemp < (float)preheat_temp) {
+			// Preheat phase: heat to user-configured temp before starting the profile
+			Reflow_Run(0, avgtemp, &heat, &fan, preheat_temp);
+			modestr = "PREHEAT";
+			// Don't increment ticks - profile timer hasn't started
+		} else {
+			reflowdone = Reflow_Run(ticks, avgtemp, &heat, &fan, 0) ? 1 : 0;
+			modestr = "REFLOW";
+		}
 
 	} else {
 		heat = fan = 0;
@@ -283,20 +291,28 @@ int32_t Reflow_Run(uint32_t thetime, float meastemp, uint8_t* pheat, uint8_t* pf
 		LCD_SetPixel(realx, y);
 	}
 
-	PID.myInput = meastemp;
-	PID_Compute(&PID);
-	uint32_t out = PID.myOutput;
-	if (out < 248) { // Fan in reverse
-		*pfan = 255 - out;
-		*pheat = 0;
+	if (NV_GetConfig(REFLOW_BANGBANG_MODE)) {
+		// Bang-bang control for T-962C: IR heaters perform poorly when pulsed
+		// via PWM. Drive at 100% or 0% and let thermal mass smooth the response.
+		if (meastemp < PID.mySetpoint) {
+			*pheat = 255;
+			*pfan = NV_GetConfig(REFLOW_MIN_FAN_SPEED);
+		} else {
+			*pheat = 0;
+			*pfan = 255; // Full fan when overshooting to cool down
+		}
 	} else {
-		*pheat = out - 248;
-
-		// When heating like crazy make sure we can reach our setpoint
-		// if(*pheat>192) { *pfan=2; } else { *pfan=2; }
-
-		// Run at a low fixed speed during heating for now
-		*pfan = NV_GetConfig(REFLOW_MIN_FAN_SPEED);
+		// Original PID control
+		PID.myInput = meastemp;
+		PID_Compute(&PID);
+		uint32_t out = PID.myOutput;
+		if (out < 248) { // Fan in reverse
+			*pfan = 255 - out;
+			*pheat = 0;
+		} else {
+			*pheat = out - 248;
+			*pfan = NV_GetConfig(REFLOW_MIN_FAN_SPEED);
+		}
 	}
 	return retval;
 }
