@@ -80,9 +80,11 @@ static const profile pidcontrol_testprofile = {
 #endif
 
 // EEPROM profile 1
+static char ee1_name[20] = "CUSTOM #1";
 static ramprofile ee1 = { "CUSTOM #1" };
 
 // EEPROM profile 2
+static char ee2_name[20] = "CUSTOM #2";
 static ramprofile ee2 = { "CUSTOM #2" };
 
 static const profile* profiles[] = {
@@ -290,3 +292,44 @@ void Reflow_DumpProfile(int profile) {
 	printf("\n");
 	profileidx = current;
 }
+
+void Reflow_ExportProfile(int profile) {
+	if (profile >= NUMPROFILES) {
+		printf("\nNo profile with id: %d\n", profile);
+		return;
+	}
+
+	int current = profileidx;
+	profileidx = profile;
+
+	// Output in import-compatible format
+	printf("\nimport profile %d ", Reflow_GetEEProfileIdx() > 0 ? Reflow_GetEEProfileIdx() : 1);
+	for (int i = 0; i < NUMPROFILETEMPS; i++) {
+		if (i > 0) printf(",");
+		printf("%d", Reflow_GetSetpointAtIdx(i));
+	}
+	printf("\n");
+	profileidx = current;
+}
+
+void Reflow_SetProfileName(int eeIdx, const char* name) {
+	char* dest;
+	ramprofile* rp;
+	if (eeIdx == 1) {
+		dest = ee1_name;
+		rp = &ee1;
+	} else if (eeIdx == 2) {
+		dest = ee2_name;
+		rp = &ee2;
+	} else {
+		return;
+	}
+	// Copy name, max 18 chars + null
+	int i;
+	for (i = 0; i < 18 && name[i] != '\0'; i++) {
+		dest[i] = name[i];
+	}
+	dest[i] = '\0';
+	rp->name = dest;
+}
+

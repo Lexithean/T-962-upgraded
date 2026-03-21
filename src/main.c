@@ -70,18 +70,24 @@ static char* help_text = \
 " about                   Show about + debug information\n" \
 " bake <setpoint>         Enter Bake mode with setpoint\n" \
 " bake <setpoint> <time>  Enter Bake mode with setpoint for <time> seconds\n" \
-" set OpMode <mode>       Set Operational Mode (0-AMBIENT, 1-MAXTEMPOVERRIDE, 2-SPLIT)\n" \
-" set OpThresh <thresh>   Set MAXTEMPOVERRIDE or SPLIT mode threshold in C (0-255)\n" \
-" get OpMode              Get Operational Mode\n" \
-" get OpThresh            Get MAXTEMPOVERRIDE or SPLIT mode threshold in C\n" \
+" dump profile <id>       Dump profile temperature data\n" \
+" export profile <id>     Export profile in import-compatible format\n" \
 " help                    Display help text\n" \
+" import profile N t,t,.. Import text profile into CUSTOM#N (1 or 2)\n" \
+" json                    Toggle JSON serial output mode\n" \
 " list profiles           List available reflow profiles\n" \
 " list settings           List machine settings\n" \
+" name profile N <name>   Rename CUSTOM#N profile (max 18 chars)\n" \
 " quiet                   No logging in standby mode\n" \
 " reflow                  Start reflow with selected profile\n" \
-" setting <id> <value>    Set setting id to value\n" \
 " select profile <id>     Select reflow profile by id\n" \
+" set OpMode <mode>       Set Operational Mode (0-2)\n" \
+" set OpThresh <thresh>   Set mode threshold in C (0-255)\n" \
+" setting <id> <value>    Set setting id to value\n" \
 " stop                    Exit reflow or bake mode\n" \
+" bbtune                  Run bang-bang auto-tune\n" \
+" pidtune                 Run PID auto-tune\n" \
+" tccal                   Run TC offset auto-calibration\n" \
 " values                  Dump currently measured values\n" \
 "\n";
 
@@ -509,6 +515,18 @@ static int32_t Main_Work(void) {
 					Reflow_DumpProfile(profNum == 1 ? 5 : 6);
 				} else {
 					printf("\nOnly CUSTOM profile 1 or 2 supported (import profile 1 or 2)\n");
+				}
+
+			} else if (sscanf(serial_cmd, "export profile %d", &param) > 0) {
+				Reflow_ExportProfile(param);
+
+			} else if (strncmp(serial_cmd, "name profile ", 13) == 0) {
+				int profNum = serial_cmd[13] - '0';
+				if ((profNum == 1 || profNum == 2) && serial_cmd[14] == ' ') {
+					Reflow_SetProfileName(profNum, &serial_cmd[15]);
+					printf("\nRenamed CUSTOM#%d to: %s\n", profNum, Reflow_GetProfileName());
+				} else {
+					printf("\nUsage: name profile 1 MyProfile (or 2)\n");
 				}
 
 			} else {

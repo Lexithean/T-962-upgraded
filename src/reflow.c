@@ -63,6 +63,14 @@ static int reflowPaused=0;
 static uint8_t runaway_detected = 0;
 static float prev_avgtemp = 0;
 
+// Heater failure detection
+static float heater_start_temp = 0;
+static uint32_t heater_fullheat_ticks = 0;
+static uint8_t heater_failure_warned = 0;
+
+// Cold start detection
+static uint8_t cold_start_logged = 0;
+
 static int32_t Reflow_Work(void) {
 	static ReflowMode_t oldmode = REFLOW_INITIAL;
 	static uint32_t lasttick = 0;
@@ -136,6 +144,39 @@ static int32_t Reflow_Work(void) {
 		}
 	}
 	prev_avgtemp = avgtemp;
+
+	// Cold start logging
+	if (!cold_start_logged && (mymode == REFLOW_REFLOW || mymode == REFLOW_BAKE)) {
+		printf("\n[INFO] Starting at %.1fC (%s start)",
+		       avgtemp, avgtemp < 40.0f ? "cold" : "warm");
+		cold_start_logged = 1;
+	} else if (cold_start_logged && mymode == REFLOW_STANDBY) {
+		cold_start_logged = 0;
+		heater_failure_warned = 0;
+	}
+
+	// Heater element failure detection
+	// If heater is at 100% for 30s and temp hasn't risen 5°C, warn
+	if (heat == 255 && (mymode == REFLOW_REFLOW || mymode == REFLOW_BAKE)) {
+		if (heater_fullheat_ticks == 0) {
+			heater_start_temp = avgtemp;
+			heater_fullheat_ticks = numticks;
+		}
+		// Check after 30 seconds of continuous full heat (120 ticks at 4Hz)
+		if (!heater_failure_warned && numticks > heater_fullheat_ticks + 120) {
+			if (avgtemp < heater_start_temp + 5.0f) {
+				printf("\n[WARNING] HEATER FAILURE? Temp hasn't risen in 30s of full heat!");
+				printf("\n[WARNING] Start: %.1fC Now: %.1fC - Check SSR/element",
+				       heater_start_temp, avgtemp);
+				heater_failure_warned = 1;
+			} else {
+				// Reset - temp is rising, heater is working
+				heater_fullheat_ticks = 0;
+			}
+		}
+	} else {
+		heater_fullheat_ticks = 0;
+	}
 
 	if (mymode != oldmode) {
 		printf("\n# Time,  Temp0, Temp1, Temp2, Temp3,  Set,Actual, Heat, Fan,  ColdJ, Mode");

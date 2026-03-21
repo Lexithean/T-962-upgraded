@@ -1,1 +1,1 @@
-const char* Version_GetGitVersion(void) { return "v1.0.0-13-g3115802-dirty"; }
+const char* Version_GetGitVersion(void) { return "v1.0.0-15-g3740d2d-dirty"; }
