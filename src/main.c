@@ -60,12 +60,12 @@ __attribute__((weak)) const char* Version_GetGitVersion(void) {
 }
 
 static char* format_about = \
-"\nT-962 ReflowOS (%s)" \
+"\nT-962 ReflowOS by Schemara.com (%s)" \
 "\n" \
 "\nSee https://github.com/Lexithean/T-962_ReflowOS for more details." \
 "\n(Based on UnifiedEngineering/T-962-improvements)" \
 "\n" \
-"\nInitializing ReflowOS...";
+"\nInitializing ReflowOS by Schemara.com...";
 
 static char* help_text = \
 "\nT-962 ReflowOS serial interface.\n\n" \
