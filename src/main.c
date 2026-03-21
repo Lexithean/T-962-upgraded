@@ -476,6 +476,41 @@ static int32_t Main_Work(void) {
 				printf("\nAdjusted setting: ");
 				Setup_printFormattedValue(param);
 
+			} else if (strcmp(serial_cmd, "json") == 0) {
+				Reflow_SetJsonOutput(!Reflow_GetJsonOutput());
+				printf("\nJSON output: %s\n", Reflow_GetJsonOutput() ? "ON" : "OFF");
+
+			} else if (strncmp(serial_cmd, "import profile ", 15) == 0) {
+				// Text-based profile import: "import profile N t1,t2,t3,..."
+				// N = 1 or 2 (CUSTOM EE profile slots)
+				int profNum = serial_cmd[15] - '0';
+				if (profNum == 1 || profNum == 2) {
+					char* tempStr = &serial_cmd[17]; // Skip "import profile N "
+					Reflow_SelectEEProfileIdx(profNum);
+					int idx = 0;
+					char* tok = tempStr;
+					while (idx < NUMPROFILETEMPS && *tok != '\0') {
+						int val = 0;
+						while (*tok >= '0' && *tok <= '9') {
+							val = val * 10 + (*tok - '0');
+							tok++;
+						}
+						Reflow_SetSetpointAtIdx(idx, (uint16_t)val);
+						idx++;
+						if (*tok == ',') tok++;
+						while (*tok == ' ') tok++;
+					}
+					// Zero remaining entries
+					for (int i = idx; i < NUMPROFILETEMPS; i++) {
+						Reflow_SetSetpointAtIdx(i, 0);
+					}
+					Reflow_SaveEEProfile();
+					printf("\nImported %d temperature points to CUSTOM#%d\n", idx, profNum);
+					Reflow_DumpProfile(profNum == 1 ? 5 : 6);
+				} else {
+					printf("\nOnly CUSTOM profile 1 or 2 supported (import profile 1 or 2)\n");
+				}
+
 			} else {
 				printf("\nCannot understand command, ? for help\n");
 			}

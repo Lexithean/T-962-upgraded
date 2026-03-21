@@ -54,6 +54,10 @@ void Reflow_ClearRunaway(void);
 int Reflow_GetProfileDuration(void);   // Total profile time in seconds
 int Reflow_GetElapsedTime(void);       // Elapsed profile time in seconds
 
+// Serial output
+void Reflow_SetJsonOutput(int on);
+int Reflow_GetJsonOutput(void);
+
 // Bang-bang auto-tune
 void Reflow_BBTune_Start(void);
 void Reflow_BBTune_Stop(void);

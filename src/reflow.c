@@ -52,6 +52,10 @@ static uint16_t numticks = 0;
 
 static int standby_logging = 0;
 
+static int json_output = 0;
+void Reflow_SetJsonOutput(int on) { json_output = on; }
+int Reflow_GetJsonOutput(void) { return json_output; }
+
 uint8_t plotDot[TOTAL_DOTS];
 static int reflowPaused=0;
 
@@ -155,16 +159,30 @@ static int32_t Reflow_Work(void) {
 	}
 
 	if (!(mymode == REFLOW_STANDBY && standby_logging == 0)) {
-		printf("\n%6.1f,  %5.1f, %5.1f, %5.1f, %5.1f,  %3u, %5.1f,  %3u, %3u,  %5.1f, %s",
-		       ((float)numticks / TICKS_PER_SECOND),
-		       Sensor_GetTemp(TC_LEFT),
-		       Sensor_GetTemp(TC_RIGHT),
-		       Sensor_GetTemp(TC_EXTRA1),
-		       Sensor_GetTemp(TC_EXTRA2),
-		       intsetpoint, avgtemp,
-		       heat, fan,
-		       Sensor_GetTemp(TC_COLD_JUNCTION),
-		       modestr);
+		if (json_output) {
+			printf("\n{\"t\":%.1f,\"tc0\":%.1f,\"tc1\":%.1f,\"tc2\":%.1f,\"tc3\":%.1f,"
+			       "\"set\":%u,\"act\":%.1f,\"heat\":%u,\"fan\":%u,\"cj\":%.1f,\"mode\":\"%s\"}",
+			       ((float)numticks / TICKS_PER_SECOND),
+			       Sensor_GetTemp(TC_LEFT),
+			       Sensor_GetTemp(TC_RIGHT),
+			       Sensor_GetTemp(TC_EXTRA1),
+			       Sensor_GetTemp(TC_EXTRA2),
+			       intsetpoint, avgtemp,
+			       heat, fan,
+			       Sensor_GetTemp(TC_COLD_JUNCTION),
+			       modestr);
+		} else {
+			printf("\n%6.1f,  %5.1f, %5.1f, %5.1f, %5.1f,  %3u, %5.1f,  %3u, %3u,  %5.1f, %s",
+			       ((float)numticks / TICKS_PER_SECOND),
+			       Sensor_GetTemp(TC_LEFT),
+			       Sensor_GetTemp(TC_RIGHT),
+			       Sensor_GetTemp(TC_EXTRA1),
+			       Sensor_GetTemp(TC_EXTRA2),
+			       intsetpoint, avgtemp,
+			       heat, fan,
+			       Sensor_GetTemp(TC_COLD_JUNCTION),
+			       modestr);
+		}
 	}
 
 	if (numticks & 1) {
