@@ -71,16 +71,20 @@ static char* help_text = \
 " about                   Show about + debug information\n" \
 " bake <setpoint>         Enter Bake mode with setpoint\n" \
 " bake <setpoint> <time>  Enter Bake mode with setpoint for <time> seconds\n" \
+" backup                  Dump all profiles as restorable text\n" \
+" delete flash <N>        Delete flash profile slot N\n" \
 " dump profile <id>       Dump profile temperature data\n" \
 " export profile <id>     Export profile in import-compatible format\n" \
 " help                    Display help text\n" \
 " import profile N t,t,.. Import text profile into CUSTOM#N (1 or 2)\n" \
 " json                    Toggle JSON serial output mode\n" \
+" list flash              List flash-stored profiles\n" \
 " list profiles           List available reflow profiles\n" \
 " list settings           List machine settings\n" \
 " name profile N <name>   Rename CUSTOM#N profile (max 18 chars)\n" \
 " quiet                   No logging in standby mode\n" \
 " reflow                  Start reflow with selected profile\n" \
+" save flash N t,t,..,Nm  Save profile to flash slot N\n" \
 " select profile <id>     Select reflow profile by id\n" \
 " set OpMode <mode>       Set Operational Mode (0-2)\n" \
 " set OpThresh <thresh>   Set mode threshold in C (0-255)\n" \
