@@ -19,6 +19,10 @@ typedef enum eNVItem {
 	REFLOW_BB_HEAT_OFFSET,
 	REFLOW_BB_COOL_OFFSET,
 
+	PID_TUNE_KP,	// Stored as value * 2, so 20.0 = 40
+	PID_TUNE_KI,	// Stored as value * 500, so 0.016 = 8
+	PID_TUNE_KD,	// Stored as value * 2, so 62.5 = 125
+
 	SCREENSAVER_ACTIVE,
 
 	OP_MODE,

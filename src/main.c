@@ -169,6 +169,7 @@ typedef enum eMainMode {
 	MAIN_EDIT_PROFILE,
 	MAIN_REFLOW,
 	MAIN_BBTUNE,
+	MAIN_PIDTUNE,
 	MAIN_SCREENSAVER,
 	MAIN_INIT
 } MainMode_t;
@@ -289,6 +290,16 @@ static int32_t Main_Work(void) {
 					retval = 0;
 				} else {
 					printf("\nBang-bang mode must be enabled first\n");
+				}
+
+			} else if (strcmp(serial_cmd, "pidtune") == 0) {
+				if (!NV_GetConfig(REFLOW_BANGBANG_MODE)) {
+					printf("\nStarting PID auto-tune (Ziegler-Nichols, 3 cycles)...\n");
+					Reflow_PIDTune_Start();
+					mode = MAIN_PIDTUNE;
+					retval = 0;
+				} else {
+					printf("\nPID tune requires PID mode (bang-bang must be OFF)\n");
 				}
 
 			} else if (strcmp(serial_cmd, "stop") == 0) {
@@ -484,9 +495,14 @@ static int32_t Main_Work(void) {
 
 		// Leave setup
 		if (keyspressed & KEY_S) {
-			// If on bang-bang row and bang-bang is enabled, go to BB Tune
+			// If on bang-bang rows and bang-bang is ON, go to BB Tune
 			if (NV_GetConfig(REFLOW_BANGBANG_MODE) && selected >= 7 && selected <= 9) {
 				mode = MAIN_BBTUNE;
+				Reflow_SetMode(REFLOW_STANDBY);
+				retval = 0;
+			// If on PID rows and bang-bang is OFF, go to PID Tune
+			} else if (!NV_GetConfig(REFLOW_BANGBANG_MODE) && selected >= 10 && selected <= 12) {
+				mode = MAIN_PIDTUNE;
 				Reflow_SetMode(REFLOW_STANDBY);
 				retval = 0;
 			} else {
@@ -927,6 +943,111 @@ static int32_t Main_Work(void) {
 			if (keyspressed & KEY_S) {
 				printf("\nBB Tune aborted by user\n");
 				Reflow_BBTune_Stop();
+				mode = MAIN_HOME;
+				retval = 0;
+			}
+		}
+
+
+	// PID auto-tune
+	} else if (mode == MAIN_PIDTUNE) {
+		LCD_FB_Clear();
+		retval = TICKS_MS(250);
+
+		PIDTunePhase_t phase = Reflow_PIDTune_GetPhase();
+
+		if (phase == PIDTUNE_PROMPT) {
+			showHeader("PID AUTO-TUNE");
+			for(uint8_t n=0;n<128;n++){
+				LCD_SetPixel(n,7);
+				LCD_SetPixel(n,64-9);
+			}
+
+			len = snprintf(buf, sizeof(buf), "INSERT PCB FOR");
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 16, FONT6X6);
+			len = snprintf(buf, sizeof(buf), "BEST RESULTS");
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 24, FONT6X6);
+			len = snprintf(buf, sizeof(buf), "ZIEGLER-NICHOLS");
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 36, FONT6X6);
+
+			int y = 64 - 7;
+			LCD_disp_str((uint8_t*)" START ", 7, 0, y, FONT6X6 | INVERT);
+			LCD_disp_str((uint8_t*)" BACK ", 6, 91, y, FONT6X6 | INVERT);
+
+			if (keyspressed & KEY_F1) {
+				Reflow_PIDTune_Start();
+				retval = 0;
+			}
+			if (keyspressed & KEY_S) {
+				mode = MAIN_SETUP;
+				Reflow_SetMode(REFLOW_STANDBYFAN);
+				retval = 0;
+			}
+
+		} else if (phase == PIDTUNE_DONE) {
+			showHeader("PID TUNE DONE");
+			for(uint8_t n=0;n<128;n++){
+				LCD_SetPixel(n,7);
+				LCD_SetPixel(n,64-9);
+			}
+
+			len = snprintf(buf, sizeof(buf), "Kp: %.2f", Reflow_PIDTune_GetKp());
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 14, FONT6X6);
+			len = snprintf(buf, sizeof(buf), "Ki: %.4f", Reflow_PIDTune_GetKi());
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 24, FONT6X6);
+			len = snprintf(buf, sizeof(buf), "Kd: %.1f", Reflow_PIDTune_GetKd());
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 34, FONT6X6);
+			len = snprintf(buf, sizeof(buf), "SAVED TO MEMORY");
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 46, FONT6X6 | INVERT);
+
+			int y = 64 - 7;
+			LCD_disp_str((uint8_t*)" DONE ", 6, 91, y, FONT6X6 | INVERT);
+
+			if (keyspressed & KEY_ANY) {
+				Reflow_PIDTune_Stop();
+				Reflow_LoadPIDTuning(); // Apply new tuning immediately
+				mode = MAIN_HOME;
+				retval = 0;
+			}
+
+		} else {
+			uint8_t heat, fan;
+			Reflow_PIDTune_Work(&heat, &fan);
+			Set_Heater(heat);
+			Set_Fan(fan);
+
+			showHeader("PID AUTO-TUNE");
+			for(uint8_t n=0;n<128;n++){
+				LCD_SetPixel(n,7);
+				LCD_SetPixel(n,64-9);
+			}
+
+			const char* phasestr = "";
+			switch (phase) {
+				case PIDTUNE_SETTLING:    phasestr = "HEATING TO TARGET"; break;
+				case PIDTUNE_OSCILLATING: phasestr = "OSCILLATING"; break;
+				default: break;
+			}
+
+			int cycle = Reflow_PIDTune_GetCycle();
+			len = snprintf(buf, sizeof(buf), "CYCLE %d/%d", cycle + 1, PIDTUNE_NUM_CYCLES);
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 12, FONT6X6);
+
+			len = snprintf(buf, sizeof(buf), "%s", phasestr);
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 22, (blinkOn==1?FONT6X6|INVERT:FONT6X6));
+
+			len = snprintf(buf, sizeof(buf), "TEMP: %3.1f`", Sensor_GetTemp(TC_AVERAGE));
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 34, FONT6X6);
+
+			len = snprintf(buf, sizeof(buf), "TARGET: %dC", PIDTUNE_TARGET);
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 44, FONT6X6);
+
+			int y = 64 - 7;
+			LCD_disp_str((uint8_t*)" ABORT ", 7, 91, y, FONT6X6 | INVERT);
+
+			if (keyspressed & KEY_S) {
+				printf("\nPID Tune aborted by user\n");
+				Reflow_PIDTune_Stop();
 				mode = MAIN_HOME;
 				retval = 0;
 			}

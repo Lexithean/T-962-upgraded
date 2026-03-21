@@ -57,4 +57,27 @@ int Reflow_BBTune_GetHeatOffset(void);
 int Reflow_BBTune_GetCoolOffset(void);
 int32_t Reflow_BBTune_Work(uint8_t* pheat, uint8_t* pfan);
 
+// PID auto-tune (Ziegler-Nichols relay method)
+#define PIDTUNE_TARGET      (200)
+#define PIDTUNE_NUM_CYCLES  (3)
+#define PIDTUNE_RELAY_HIGH  (255)	// Heater output when below setpoint
+#define PIDTUNE_RELAY_LOW   (0)		// Heater output when above setpoint
+
+typedef enum ePIDTunePhase {
+	PIDTUNE_PROMPT = 0,
+	PIDTUNE_SETTLING,		// Heating to target area
+	PIDTUNE_OSCILLATING,	// Relay cycling, measuring period + amplitude
+	PIDTUNE_DONE
+} PIDTunePhase_t;
+
+void Reflow_PIDTune_Start(void);
+void Reflow_PIDTune_Stop(void);
+PIDTunePhase_t Reflow_PIDTune_GetPhase(void);
+int Reflow_PIDTune_GetCycle(void);
+float Reflow_PIDTune_GetKp(void);
+float Reflow_PIDTune_GetKi(void);
+float Reflow_PIDTune_GetKd(void);
+int32_t Reflow_PIDTune_Work(uint8_t* pheat, uint8_t* pfan);
+void Reflow_LoadPIDTuning(void);
+
 #endif /* REFLOW_H_ */

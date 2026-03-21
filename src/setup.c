@@ -34,6 +34,9 @@ static setupMenuStruct setupmenu[] = {
 	{"Bang-bang heat  %4.0f",	REFLOW_BANGBANG_MODE,	 0, 1, 0, 1.0f,		"Bang-bang heat    OFF","Bang-bang heat     ON"},
 	{"BB heat offset %3.0fC",	REFLOW_BB_HEAT_OFFSET,	 0, 25, 0, 1.0f,	"BB heat offset     0C","BB heat offset    25C"},
 	{"BB cool offset %3.0fC",	REFLOW_BB_COOL_OFFSET,	 0, 25, 0, 1.0f,	"BB cool offset     0C","BB cool offset    25C"},
+	{"PID Kp        %5.1f",		PID_TUNE_KP,			 0, 254, 0, 0.5f,	"PID Kp      DEFAULT","PID Kp        127.0"},
+	{"PID Ki       %5.3f",		PID_TUNE_KI,			 0, 254, 0, 0.002f,	"PID Ki      DEFAULT","PID Ki        0.508"},
+	{"PID Kd        %5.1f",		PID_TUNE_KD,			 0, 254, 0, 0.5f,	"PID Kd      DEFAULT","PID Kd        127.0"},
 	{"Screensaver mins %4.0f",	SCREENSAVER_ACTIVE, 	 0, 60, 0, 1.0f,		"Screensaver       OFF","Screensaver    1 HOUR"},
 };
 
