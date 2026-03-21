@@ -266,3 +266,70 @@ void Sensor_ListAll(void) {
 		printf("\nNo cold-junction sensor on PCB");
 	}
 }
+
+// ============================================================================
+// TC Offset Auto-Calibration
+// At cold ambient, the cold junction sensor (DS18B20) is used as the reference.
+// Both TCs should read the same temperature. Any difference is offset error.
+// ============================================================================
+
+static float cal_error[2] = { 0.0f, 0.0f };
+
+float Sensor_GetCalError(int channel) {
+	if (channel >= 0 && channel < 2) return cal_error[channel];
+	return 0.0f;
+}
+
+int Sensor_AutoCalibrate(void) {
+	// Require cold junction sensor
+	if (!cjsensorpresent) {
+		printf("\nTC Cal: No cold junction sensor present");
+		return 2;
+	}
+
+	// Read current temperatures
+	Sensor_DoConversion();
+	float ref = Sensor_GetTemp(TC_COLD_JUNCTION);
+	float left = Sensor_GetTemp(TC_LEFT);
+	float right = Sensor_GetTemp(TC_RIGHT);
+
+	// Check oven is cold enough
+	if (ref > TCCAL_MAX_TEMP || left > TCCAL_MAX_TEMP || right > TCCAL_MAX_TEMP) {
+		printf("\nTC Cal: Oven too hot (%.1f/%.1f/%.1fC, max %.0fC)",
+		       left, right, ref, TCCAL_MAX_TEMP);
+		return 1;
+	}
+
+	// Calculate errors (positive = TC reads too high)
+	cal_error[0] = left - ref;
+	cal_error[1] = right - ref;
+
+	// Current NV offset values
+	int nv_left = NV_GetConfig(TC_LEFT_OFFSET);
+	int nv_right = NV_GetConfig(TC_RIGHT_OFFSET);
+
+	// Offset encoding: actual = (nv - 127) * 0.5
+	// To reduce reading by `error`: new_nv = old_nv - (error / 0.5)
+	int new_left = nv_left - (int)(cal_error[0] * 2.0f + 0.5f);
+	int new_right = nv_right - (int)(cal_error[1] * 2.0f + 0.5f);
+
+	// Clamp to valid NV range (0-254, 255 is reserved for uninitialised)
+	if (new_left < 0) new_left = 0;
+	if (new_left > 254) new_left = 254;
+	if (new_right < 0) new_right = 0;
+	if (new_right > 254) new_right = 254;
+
+	NV_SetConfig(TC_LEFT_OFFSET, (uint8_t)new_left);
+	NV_SetConfig(TC_RIGHT_OFFSET, (uint8_t)new_right);
+
+	// Reload calibration values
+	adcoffsetadj[0] = ((float)(new_left - 127)) * 0.5f;
+	adcoffsetadj[1] = ((float)(new_right - 127)) * 0.5f;
+
+	printf("\nTC Cal: ref=%.1fC L=%.1f(err=%+.1f) R=%.1f(err=%+.1f)",
+	       ref, left, cal_error[0], right, cal_error[1]);
+	printf("\nTC Cal: NV offset L=%d->%d R=%d->%d",
+	       nv_left, new_left, nv_right, new_right);
+
+	return 0;
+}

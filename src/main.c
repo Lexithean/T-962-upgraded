@@ -170,6 +170,7 @@ typedef enum eMainMode {
 	MAIN_REFLOW,
 	MAIN_BBTUNE,
 	MAIN_PIDTUNE,
+	MAIN_TCCAL,
 	MAIN_SCREENSAVER,
 	MAIN_INIT
 } MainMode_t;
@@ -300,6 +301,17 @@ static int32_t Main_Work(void) {
 					retval = 0;
 				} else {
 					printf("\nPID tune requires PID mode (bang-bang must be OFF)\n");
+				}
+
+			} else if (strcmp(serial_cmd, "tccal") == 0) {
+				printf("\nRunning TC offset auto-calibration...\n");
+				int result = Sensor_AutoCalibrate();
+				if (result == 0) {
+					printf("\nCalibration successful\n");
+				} else if (result == 1) {
+					printf("\nOven too hot, let it cool below %.0fC\n", TCCAL_MAX_TEMP);
+				} else {
+					printf("\nNo cold junction sensor found\n");
 				}
 
 			} else if (strcmp(serial_cmd, "stop") == 0) {
@@ -503,6 +515,11 @@ static int32_t Main_Work(void) {
 			// If on PID rows and bang-bang is OFF, go to PID Tune
 			} else if (!NV_GetConfig(REFLOW_BANGBANG_MODE) && selected >= 10 && selected <= 12) {
 				mode = MAIN_PIDTUNE;
+				Reflow_SetMode(REFLOW_STANDBY);
+				retval = 0;
+			// If on TC offset rows (3 or 5 = left/right offset), go to TC Cal
+			} else if (selected == 3 || selected == 5) {
+				mode = MAIN_TCCAL;
 				Reflow_SetMode(REFLOW_STANDBY);
 				retval = 0;
 			} else {
@@ -943,6 +960,85 @@ static int32_t Main_Work(void) {
 			if (keyspressed & KEY_S) {
 				printf("\nBB Tune aborted by user\n");
 				Reflow_BBTune_Stop();
+				mode = MAIN_HOME;
+				retval = 0;
+			}
+		}
+
+
+	// TC offset auto-calibration
+	} else if (mode == MAIN_TCCAL) {
+		static int tccal_result = -1; // -1=not run yet
+		LCD_FB_Clear();
+		retval = TICKS_MS(250);
+
+		showHeader("TC CALIBRATION");
+		for(uint8_t n=0;n<128;n++){
+			LCD_SetPixel(n,7);
+			LCD_SetPixel(n,64-9);
+		}
+
+		if (tccal_result == -1) {
+			// Not run yet — show prompt
+			len = snprintf(buf, sizeof(buf), "ENSURE OVEN IS");
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 14, FONT6X6);
+			len = snprintf(buf, sizeof(buf), "COLD (BELOW %dC)", (int)TCCAL_MAX_TEMP);
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 22, FONT6X6);
+			len = snprintf(buf, sizeof(buf), "CJ REF: %.1fC", Sensor_GetTemp(TC_COLD_JUNCTION));
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 34, FONT6X6);
+			len = snprintf(buf, sizeof(buf), "L:%.1f R:%.1f", Sensor_GetTemp(TC_LEFT), Sensor_GetTemp(TC_RIGHT));
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 42, FONT6X6);
+
+			int y = 64 - 7;
+			LCD_disp_str((uint8_t*)"  CAL  ", 7, 0, y, FONT6X6 | INVERT);
+			LCD_disp_str((uint8_t*)" BACK ", 6, 91, y, FONT6X6 | INVERT);
+
+			if (keyspressed & KEY_F1) {
+				tccal_result = Sensor_AutoCalibrate();
+				retval = 0;
+			}
+			if (keyspressed & KEY_S) {
+				tccal_result = -1;
+				mode = MAIN_SETUP;
+				Reflow_SetMode(REFLOW_STANDBYFAN);
+				retval = 0;
+			}
+		} else if (tccal_result == 0) {
+			// Success
+			len = snprintf(buf, sizeof(buf), "CALIBRATED OK");
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 14, FONT6X6 | INVERT);
+			len = snprintf(buf, sizeof(buf), "L ERR: %+.1fC", Sensor_GetCalError(0));
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 26, FONT6X6);
+			len = snprintf(buf, sizeof(buf), "R ERR: %+.1fC", Sensor_GetCalError(1));
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 34, FONT6X6);
+			len = snprintf(buf, sizeof(buf), "SAVED TO MEMORY");
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 46, FONT6X6);
+
+			int y = 64 - 7;
+			LCD_disp_str((uint8_t*)" DONE ", 6, 91, y, FONT6X6 | INVERT);
+
+			if (keyspressed & KEY_ANY) {
+				tccal_result = -1;
+				mode = MAIN_HOME;
+				retval = 0;
+			}
+		} else {
+			// Error
+			const char* errmsg = (tccal_result == 1) ? "OVEN TOO HOT" : "NO CJ SENSOR";
+			len = snprintf(buf, sizeof(buf), "ERROR:");
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 20, FONT6X6);
+			len = snprintf(buf, sizeof(buf), "%s", errmsg);
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 30, FONT6X6 | INVERT);
+			if (tccal_result == 1) {
+				len = snprintf(buf, sizeof(buf), "LET COOL BELOW %dC", (int)TCCAL_MAX_TEMP);
+				LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 42, FONT6X6);
+			}
+
+			int y = 64 - 7;
+			LCD_disp_str((uint8_t*)" BACK ", 6, 91, y, FONT6X6 | INVERT);
+
+			if (keyspressed & KEY_ANY) {
+				tccal_result = -1;
 				mode = MAIN_HOME;
 				retval = 0;
 			}
