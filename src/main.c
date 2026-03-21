@@ -168,11 +168,95 @@ typedef enum eMainMode {
 	MAIN_SELECT_PROFILE,
 	MAIN_EDIT_PROFILE,
 	MAIN_REFLOW,
+	MAIN_BBTUNE,
+	MAIN_PIDTUNE,
+	MAIN_TCCAL,
 	MAIN_SCREENSAVER,
 	MAIN_INIT
 } MainMode_t;
 
 static char buf[25];
+
+// ============================================================================
+// Rolling temperature graph for tune screens
+// Graph area: X=9..118 (110 pixels), Y=10..52 (42 pixels)
+// ============================================================================
+#define TUNE_GRAPH_X0    (9)
+#define TUNE_GRAPH_W     (110)
+#define TUNE_GRAPH_Y0    (10)   // Top of graph (high temp)
+#define TUNE_GRAPH_Y1    (52)   // Bottom of graph (low temp)
+#define TUNE_GRAPH_H     (TUNE_GRAPH_Y1 - TUNE_GRAPH_Y0)
+#define TUNE_GRAPH_TMIN  (20.0f)   // Min temp on Y axis
+#define TUNE_GRAPH_TMAX  (260.0f)  // Max temp on Y axis
+
+static uint8_t tuneGraph[TUNE_GRAPH_W]; // Y pixel for each sample
+static int tuneGraphIdx = 0;
+static int tuneGraphCount = 0;
+
+static void TuneGraph_Reset(void) {
+	tuneGraphIdx = 0;
+	tuneGraphCount = 0;
+	for (int i = 0; i < TUNE_GRAPH_W; i++) tuneGraph[i] = 0;
+}
+
+static void TuneGraph_AddSample(float temp) {
+	// Map temperature to Y pixel (inverted: high temp = low Y)
+	float frac = (temp - TUNE_GRAPH_TMIN) / (TUNE_GRAPH_TMAX - TUNE_GRAPH_TMIN);
+	if (frac < 0.0f) frac = 0.0f;
+	if (frac > 1.0f) frac = 1.0f;
+	uint8_t y = TUNE_GRAPH_Y1 - (uint8_t)(frac * (float)TUNE_GRAPH_H);
+	tuneGraph[tuneGraphIdx] = y;
+	tuneGraphIdx = (tuneGraphIdx + 1) % TUNE_GRAPH_W;
+	if (tuneGraphCount < TUNE_GRAPH_W) tuneGraphCount++;
+}
+
+static void TuneGraph_Draw(float targetHigh, float targetLow) {
+	// Draw graph border (left and bottom lines)
+	for (int y = TUNE_GRAPH_Y0; y <= TUNE_GRAPH_Y1; y++) {
+		LCD_SetPixel(TUNE_GRAPH_X0 - 1, y);
+	}
+	for (int x = TUNE_GRAPH_X0 - 1; x <= TUNE_GRAPH_X0 + TUNE_GRAPH_W; x++) {
+		LCD_SetPixel(x, TUNE_GRAPH_Y1 + 1);
+	}
+
+	// Draw target line(s) as dashed
+	if (targetHigh > 0) {
+		float frac = (targetHigh - TUNE_GRAPH_TMIN) / (TUNE_GRAPH_TMAX - TUNE_GRAPH_TMIN);
+		if (frac >= 0.0f && frac <= 1.0f) {
+			uint8_t ty = TUNE_GRAPH_Y1 - (uint8_t)(frac * (float)TUNE_GRAPH_H);
+			for (int x = TUNE_GRAPH_X0; x < TUNE_GRAPH_X0 + TUNE_GRAPH_W; x += 3) {
+				LCD_SetPixel(x, ty);
+			}
+		}
+	}
+	if (targetLow > 0 && targetLow != targetHigh) {
+		float frac = (targetLow - TUNE_GRAPH_TMIN) / (TUNE_GRAPH_TMAX - TUNE_GRAPH_TMIN);
+		if (frac >= 0.0f && frac <= 1.0f) {
+			uint8_t ty = TUNE_GRAPH_Y1 - (uint8_t)(frac * (float)TUNE_GRAPH_H);
+			for (int x = TUNE_GRAPH_X0; x < TUNE_GRAPH_X0 + TUNE_GRAPH_W; x += 3) {
+				LCD_SetPixel(x, ty);
+			}
+		}
+	}
+
+	// Draw temperature trace (rolling, newest sample on the right)
+	for (int i = 0; i < tuneGraphCount; i++) {
+		int bufIdx;
+		int screenX;
+		if (tuneGraphCount < TUNE_GRAPH_W) {
+			// Buffer not full yet: draw from left
+			bufIdx = i;
+			screenX = TUNE_GRAPH_X0 + i;
+		} else {
+			// Buffer full: oldest is at tuneGraphIdx, draw rolling
+			bufIdx = (tuneGraphIdx + i) % TUNE_GRAPH_W;
+			screenX = TUNE_GRAPH_X0 + i;
+		}
+		if (tuneGraph[bufIdx] > 0) {
+			LCD_SetPixel(screenX, tuneGraph[bufIdx]);
+		}
+	}
+}
 static int len;
 static uint16_t animCnt=0;
 static int16_t animIX=0,animIY=0,animIZ=0;
@@ -278,6 +362,37 @@ static int32_t Main_Work(void) {
 					printf("%d: ", i);
 					Setup_printFormattedValue(i);
 					printf("\n");
+				}
+
+			} else if (strcmp(serial_cmd, "bbtune") == 0) {
+				if (NV_GetConfig(REFLOW_BANGBANG_MODE)) {
+					printf("\nStarting bang-bang auto-tune (3 cycles)...\n");
+					Reflow_BBTune_Start();
+					mode = MAIN_BBTUNE;
+					retval = 0;
+				} else {
+					printf("\nBang-bang mode must be enabled first\n");
+				}
+
+			} else if (strcmp(serial_cmd, "pidtune") == 0) {
+				if (!NV_GetConfig(REFLOW_BANGBANG_MODE)) {
+					printf("\nStarting PID auto-tune (Ziegler-Nichols, 3 cycles)...\n");
+					Reflow_PIDTune_Start();
+					mode = MAIN_PIDTUNE;
+					retval = 0;
+				} else {
+					printf("\nPID tune requires PID mode (bang-bang must be OFF)\n");
+				}
+
+			} else if (strcmp(serial_cmd, "tccal") == 0) {
+				printf("\nRunning TC offset auto-calibration...\n");
+				int result = Sensor_AutoCalibrate();
+				if (result == 0) {
+					printf("\nCalibration successful\n");
+				} else if (result == 1) {
+					printf("\nOven too hot, let it cool below %.0fC\n", TCCAL_MAX_TEMP);
+				} else {
+					printf("\nNo cold junction sensor found\n");
 				}
 
 			} else if (strcmp(serial_cmd, "stop") == 0) {
@@ -473,9 +588,26 @@ static int32_t Main_Work(void) {
 
 		// Leave setup
 		if (keyspressed & KEY_S) {
-			mode = MAIN_HOME;
-			Reflow_SetMode(REFLOW_STANDBY);
-			retval = 0; // Force immediate refresh
+			// If on bang-bang rows and bang-bang is ON, go to BB Tune
+			if (NV_GetConfig(REFLOW_BANGBANG_MODE) && selected >= 7 && selected <= 9) {
+				mode = MAIN_BBTUNE;
+				Reflow_SetMode(REFLOW_STANDBY);
+				retval = 0;
+			// If on PID rows and bang-bang is OFF, go to PID Tune
+			} else if (!NV_GetConfig(REFLOW_BANGBANG_MODE) && selected >= 10 && selected <= 12) {
+				mode = MAIN_PIDTUNE;
+				Reflow_SetMode(REFLOW_STANDBY);
+				retval = 0;
+			// If on TC offset rows (3 or 5 = left/right offset), go to TC Cal
+			} else if (selected == 3 || selected == 5) {
+				mode = MAIN_TCCAL;
+				Reflow_SetMode(REFLOW_STANDBY);
+				retval = 0;
+			} else {
+				mode = MAIN_HOME;
+				Reflow_SetMode(REFLOW_STANDBY);
+				retval = 0; // Force immediate refresh
+			}
 		}
 
 
@@ -805,6 +937,294 @@ static int32_t Main_Work(void) {
 			retval = 0; // Force immediate refresh
 		}
 
+
+
+	// Bang-bang auto-tune
+	} else if (mode == MAIN_BBTUNE) {
+		LCD_FB_Clear();
+		retval = TICKS_MS(250);
+
+		BBTunePhase_t phase = Reflow_BBTune_GetPhase();
+
+		if (phase == BBTUNE_PROMPT) {
+			// Pre-start prompt
+			showHeader("BB AUTO-TUNE");
+			for(uint8_t n=0;n<128;n++){
+				LCD_SetPixel(n,7);
+				LCD_SetPixel(n,64-9);
+			}
+
+			len = snprintf(buf, sizeof(buf), "INSERT PCB FOR");
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 16, FONT6X6);
+			len = snprintf(buf, sizeof(buf), "BEST RESULTS");
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 24, FONT6X6);
+			len = snprintf(buf, sizeof(buf), "3 HEAT/COOL CYCLES");
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 36, FONT6X6);
+
+			int y = 64 - 7;
+			LCD_disp_str((uint8_t*)" START ", 7, 0, y, FONT6X6 | INVERT);
+			LCD_disp_str((uint8_t*)" BACK ", 6, 91, y, FONT6X6 | INVERT);
+
+			if (keyspressed & KEY_F1) {
+				TuneGraph_Reset();
+				Reflow_BBTune_Start();
+				retval = 0;
+			}
+			if (keyspressed & KEY_S) {
+				mode = MAIN_SETUP;
+				Reflow_SetMode(REFLOW_STANDBYFAN);
+				retval = 0;
+			}
+
+		} else if (phase == BBTUNE_DONE) {
+			// Show results
+			showHeader("BB TUNE DONE");
+			for(uint8_t n=0;n<128;n++){
+				LCD_SetPixel(n,7);
+				LCD_SetPixel(n,64-9);
+			}
+
+			len = snprintf(buf, sizeof(buf), "HEAT OFFSET: %dC", Reflow_BBTune_GetHeatOffset());
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 18, FONT6X6);
+			len = snprintf(buf, sizeof(buf), "COOL OFFSET: %dC", Reflow_BBTune_GetCoolOffset());
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 28, FONT6X6);
+			len = snprintf(buf, sizeof(buf), "SAVED TO MEMORY");
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 42, FONT6X6 | INVERT);
+
+			int y = 64 - 7;
+			LCD_disp_str((uint8_t*)" DONE ", 6, 91, y, FONT6X6 | INVERT);
+
+			if (keyspressed & KEY_ANY) {
+				Reflow_BBTune_Stop();
+				mode = MAIN_HOME;
+				retval = 0;
+			}
+
+		} else {
+			// Tuning in progress — show live graph
+			uint8_t heat, fan;
+			Reflow_BBTune_Work(&heat, &fan);
+			Set_Heater(heat);
+			Set_Fan(fan);
+
+			// Add temperature sample to rolling graph
+			TuneGraph_AddSample(Sensor_GetTemp(TC_AVERAGE));
+
+			// Header with cycle and phase
+			const char* phasestr = "";
+			switch (phase) {
+				case BBTUNE_HEATING:    phasestr = "HEAT"; break;
+				case BBTUNE_HEAT_COAST: phasestr = "PEAK"; break;
+				case BBTUNE_COOLING:    phasestr = "COOL"; break;
+				case BBTUNE_COOL_COAST: phasestr = "LOW"; break;
+				default: break;
+			}
+			int cycle = Reflow_BBTune_GetCycle();
+			len = snprintf(buf, sizeof(buf), "%d/%d %s %.0f`",
+			               cycle + 1, BBTUNE_NUM_CYCLES, phasestr,
+			               Sensor_GetTemp(TC_AVERAGE));
+			showHeader(buf);
+
+			// Draw graph with both target lines
+			TuneGraph_Draw((float)BBTUNE_TARGET_HIGH, (float)BBTUNE_TARGET_LOW);
+
+			// Bottom bar
+			for(uint8_t n=0;n<128;n++) LCD_SetPixel(n, 64-9);
+			int y = 64 - 7;
+			len = snprintf(buf, sizeof(buf), "%d-%dC", BBTUNE_TARGET_LOW, BBTUNE_TARGET_HIGH);
+			LCD_disp_str((uint8_t*)buf, len, 2, y, FONT6X6);
+			LCD_disp_str((uint8_t*)" ABORT ", 7, 91, y, FONT6X6 | INVERT);
+
+			if (keyspressed & KEY_S) {
+				printf("\nBB Tune aborted by user\n");
+				Reflow_BBTune_Stop();
+				mode = MAIN_HOME;
+				retval = 0;
+			}
+		}
+
+
+	// TC offset auto-calibration
+	} else if (mode == MAIN_TCCAL) {
+		static int tccal_result = -1; // -1=not run yet
+		LCD_FB_Clear();
+		retval = TICKS_MS(250);
+
+		showHeader("TC CALIBRATION");
+		for(uint8_t n=0;n<128;n++){
+			LCD_SetPixel(n,7);
+			LCD_SetPixel(n,64-9);
+		}
+
+		if (tccal_result == -1) {
+			// Not run yet — show prompt
+			len = snprintf(buf, sizeof(buf), "ENSURE OVEN IS");
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 14, FONT6X6);
+			len = snprintf(buf, sizeof(buf), "COLD (BELOW %dC)", (int)TCCAL_MAX_TEMP);
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 22, FONT6X6);
+			len = snprintf(buf, sizeof(buf), "CJ REF: %.1fC", Sensor_GetTemp(TC_COLD_JUNCTION));
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 34, FONT6X6);
+			len = snprintf(buf, sizeof(buf), "L:%.1f R:%.1f", Sensor_GetTemp(TC_LEFT), Sensor_GetTemp(TC_RIGHT));
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 42, FONT6X6);
+
+			int y = 64 - 7;
+			LCD_disp_str((uint8_t*)"  CAL  ", 7, 0, y, FONT6X6 | INVERT);
+			LCD_disp_str((uint8_t*)" BACK ", 6, 91, y, FONT6X6 | INVERT);
+
+			if (keyspressed & KEY_F1) {
+				tccal_result = Sensor_AutoCalibrate();
+				retval = 0;
+			}
+			if (keyspressed & KEY_S) {
+				tccal_result = -1;
+				mode = MAIN_SETUP;
+				Reflow_SetMode(REFLOW_STANDBYFAN);
+				retval = 0;
+			}
+		} else if (tccal_result == 0) {
+			// Success
+			len = snprintf(buf, sizeof(buf), "CALIBRATED OK");
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 14, FONT6X6 | INVERT);
+			len = snprintf(buf, sizeof(buf), "L ERR: %+.1fC", Sensor_GetCalError(0));
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 26, FONT6X6);
+			len = snprintf(buf, sizeof(buf), "R ERR: %+.1fC", Sensor_GetCalError(1));
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 34, FONT6X6);
+			len = snprintf(buf, sizeof(buf), "SAVED TO MEMORY");
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 46, FONT6X6);
+
+			int y = 64 - 7;
+			LCD_disp_str((uint8_t*)" DONE ", 6, 91, y, FONT6X6 | INVERT);
+
+			if (keyspressed & KEY_ANY) {
+				tccal_result = -1;
+				mode = MAIN_HOME;
+				retval = 0;
+			}
+		} else {
+			// Error
+			const char* errmsg = (tccal_result == 1) ? "OVEN TOO HOT" : "NO CJ SENSOR";
+			len = snprintf(buf, sizeof(buf), "ERROR:");
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 20, FONT6X6);
+			len = snprintf(buf, sizeof(buf), "%s", errmsg);
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 30, FONT6X6 | INVERT);
+			if (tccal_result == 1) {
+				len = snprintf(buf, sizeof(buf), "LET COOL BELOW %dC", (int)TCCAL_MAX_TEMP);
+				LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 42, FONT6X6);
+			}
+
+			int y = 64 - 7;
+			LCD_disp_str((uint8_t*)" BACK ", 6, 91, y, FONT6X6 | INVERT);
+
+			if (keyspressed & KEY_ANY) {
+				tccal_result = -1;
+				mode = MAIN_HOME;
+				retval = 0;
+			}
+		}
+
+
+	// PID auto-tune
+	} else if (mode == MAIN_PIDTUNE) {
+		LCD_FB_Clear();
+		retval = TICKS_MS(250);
+
+		PIDTunePhase_t phase = Reflow_PIDTune_GetPhase();
+
+		if (phase == PIDTUNE_PROMPT) {
+			showHeader("PID AUTO-TUNE");
+			for(uint8_t n=0;n<128;n++){
+				LCD_SetPixel(n,7);
+				LCD_SetPixel(n,64-9);
+			}
+
+			len = snprintf(buf, sizeof(buf), "INSERT PCB FOR");
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 16, FONT6X6);
+			len = snprintf(buf, sizeof(buf), "BEST RESULTS");
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 24, FONT6X6);
+			len = snprintf(buf, sizeof(buf), "ZIEGLER-NICHOLS");
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 36, FONT6X6);
+
+			int y = 64 - 7;
+			LCD_disp_str((uint8_t*)" START ", 7, 0, y, FONT6X6 | INVERT);
+			LCD_disp_str((uint8_t*)" BACK ", 6, 91, y, FONT6X6 | INVERT);
+
+			if (keyspressed & KEY_F1) {
+				TuneGraph_Reset();
+				Reflow_PIDTune_Start();
+				retval = 0;
+			}
+			if (keyspressed & KEY_S) {
+				mode = MAIN_SETUP;
+				Reflow_SetMode(REFLOW_STANDBYFAN);
+				retval = 0;
+			}
+
+		} else if (phase == PIDTUNE_DONE) {
+			showHeader("PID TUNE DONE");
+			for(uint8_t n=0;n<128;n++){
+				LCD_SetPixel(n,7);
+				LCD_SetPixel(n,64-9);
+			}
+
+			len = snprintf(buf, sizeof(buf), "Kp: %.2f", Reflow_PIDTune_GetKp());
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 14, FONT6X6);
+			len = snprintf(buf, sizeof(buf), "Ki: %.4f", Reflow_PIDTune_GetKi());
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 24, FONT6X6);
+			len = snprintf(buf, sizeof(buf), "Kd: %.1f", Reflow_PIDTune_GetKd());
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 34, FONT6X6);
+			len = snprintf(buf, sizeof(buf), "SAVED TO MEMORY");
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 46, FONT6X6 | INVERT);
+
+			int y = 64 - 7;
+			LCD_disp_str((uint8_t*)" DONE ", 6, 91, y, FONT6X6 | INVERT);
+
+			if (keyspressed & KEY_ANY) {
+				Reflow_PIDTune_Stop();
+				Reflow_LoadPIDTuning(); // Apply new tuning immediately
+				mode = MAIN_HOME;
+				retval = 0;
+			}
+
+		} else {
+			// Tuning in progress — show live graph
+			uint8_t heat, fan;
+			Reflow_PIDTune_Work(&heat, &fan);
+			Set_Heater(heat);
+			Set_Fan(fan);
+
+			// Add temperature sample to rolling graph
+			TuneGraph_AddSample(Sensor_GetTemp(TC_AVERAGE));
+
+			// Header with cycle and phase
+			const char* phasestr = "";
+			switch (phase) {
+				case PIDTUNE_SETTLING:    phasestr = "SETTLE"; break;
+				case PIDTUNE_OSCILLATING: phasestr = "OSCIL"; break;
+				default: break;
+			}
+			int cycle = Reflow_PIDTune_GetCycle();
+			len = snprintf(buf, sizeof(buf), "%d/%d %s %.0f`",
+			               cycle + 1, PIDTUNE_NUM_CYCLES, phasestr,
+			               Sensor_GetTemp(TC_AVERAGE));
+			showHeader(buf);
+
+			// Draw graph with single target line
+			TuneGraph_Draw((float)PIDTUNE_TARGET, 0);
+
+			// Bottom bar
+			for(uint8_t n=0;n<128;n++) LCD_SetPixel(n, 64-9);
+			int y = 64 - 7;
+			len = snprintf(buf, sizeof(buf), "TGT %dC", PIDTUNE_TARGET);
+			LCD_disp_str((uint8_t*)buf, len, 2, y, FONT6X6);
+			LCD_disp_str((uint8_t*)" ABORT ", 7, 91, y, FONT6X6 | INVERT);
+
+			if (keyspressed & KEY_S) {
+				printf("\nPID Tune aborted by user\n");
+				Reflow_PIDTune_Stop();
+				mode = MAIN_HOME;
+				retval = 0;
+			}
+		}
 
 
 	// Show screensaver

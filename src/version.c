@@ -1,0 +1,1 @@
+const char* Version_GetGitVersion(void) { return "v1.0.0-5-g8cf392e-dirty"; }

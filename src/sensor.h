@@ -31,4 +31,11 @@ uint8_t Sensor_IsValid(TempSensor_t sensor);
 
 void Sensor_ListAll(void);
 
+// TC offset auto-calibration
+#define TCCAL_MAX_TEMP   (40.0f)   // Max temp to allow calibration
+#define TCCAL_STABLE_S   (10)      // Seconds of stability required
+#define TCCAL_STABLE_TOL (0.5f)    // Max temp change during stability check
+int Sensor_AutoCalibrate(void);    // Returns 0=success, 1=too hot, 2=no CJ sensor
+float Sensor_GetCalError(int channel); // Get last measured error for display
+
 #endif /* SENSORS_H_ */
