@@ -28,6 +28,15 @@ typedef enum eNVItem {
 	OP_MODE,
 	MODE_THRESH,
 
+	SAFETY_RUNAWAY_THRESH,	// Max °C above setpoint before abort (0=disabled, 1-50)
+	REFLOW_BUZZER_ALERTS,	// Audible alerts at stage transitions (0=off, 1=on)
+	REFLOW_MAX_COOL_RATE,	// Max cooling rate °C/10s (0=unlimited, 1-50)
+
+	TC_LEFT_OFFSET_HI,		// High-temp offset at 200°C (same encoding as TC_LEFT_OFFSET)
+	TC_RIGHT_OFFSET_HI,	// High-temp offset at 200°C (same encoding as TC_RIGHT_OFFSET)
+
+	TEMP_UNIT_FAHRENHEIT,	// 0=Celsius, 1=Fahrenheit display
+
 	NVITEM_NUM_ITEMS // Last value
 } NVItem_t;
 

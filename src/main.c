@@ -70,21 +70,41 @@ static char* help_text = \
 " about                   Show about + debug information\n" \
 " bake <setpoint>         Enter Bake mode with setpoint\n" \
 " bake <setpoint> <time>  Enter Bake mode with setpoint for <time> seconds\n" \
-" set OpMode <mode>       Set Operational Mode (0-AMBIENT, 1-MAXTEMPOVERRIDE, 2-SPLIT)\n" \
-" set OpThresh <thresh>   Set MAXTEMPOVERRIDE or SPLIT mode threshold in C (0-255)\n" \
-" get OpMode              Get Operational Mode\n" \
-" get OpThresh            Get MAXTEMPOVERRIDE or SPLIT mode threshold in C\n" \
+" dump profile <id>       Dump profile temperature data\n" \
+" export profile <id>     Export profile in import-compatible format\n" \
 " help                    Display help text\n" \
+" import profile N t,t,.. Import text profile into CUSTOM#N (1 or 2)\n" \
+" json                    Toggle JSON serial output mode\n" \
 " list profiles           List available reflow profiles\n" \
 " list settings           List machine settings\n" \
+" name profile N <name>   Rename CUSTOM#N profile (max 18 chars)\n" \
 " quiet                   No logging in standby mode\n" \
 " reflow                  Start reflow with selected profile\n" \
-" setting <id> <value>    Set setting id to value\n" \
 " select profile <id>     Select reflow profile by id\n" \
+" set OpMode <mode>       Set Operational Mode (0-2)\n" \
+" set OpThresh <thresh>   Set mode threshold in C (0-255)\n" \
+" setting <id> <value>    Set setting id to value\n" \
 " stop                    Exit reflow or bake mode\n" \
+" bbtune                  Run bang-bang auto-tune\n" \
+" pidtune                 Run PID auto-tune\n" \
+" tccal                   Run TC offset auto-calibration\n" \
 " values                  Dump currently measured values\n" \
 "\n";
 
+
+static float display_temp(float celsius) {
+	if (NV_GetConfig(TEMP_UNIT_FAHRENHEIT) == 1) {
+		return celsius * 9.0f / 5.0f + 32.0f;
+	}
+	return celsius;
+}
+
+static const char* temp_unit(void) {
+	if (NV_GetConfig(TEMP_UNIT_FAHRENHEIT) == 1) {
+		return "F";
+	}
+	return "C";
+}
 
 static int32_t Main_Work(void);
 
@@ -476,6 +496,53 @@ static int32_t Main_Work(void) {
 				printf("\nAdjusted setting: ");
 				Setup_printFormattedValue(param);
 
+			} else if (strcmp(serial_cmd, "json") == 0) {
+				Reflow_SetJsonOutput(!Reflow_GetJsonOutput());
+				printf("\nJSON output: %s\n", Reflow_GetJsonOutput() ? "ON" : "OFF");
+
+			} else if (strncmp(serial_cmd, "import profile ", 15) == 0) {
+				// Text-based profile import: "import profile N t1,t2,t3,..."
+				// N = 1 or 2 (CUSTOM EE profile slots)
+				int profNum = serial_cmd[15] - '0';
+				if (profNum == 1 || profNum == 2) {
+					char* tempStr = &serial_cmd[17]; // Skip "import profile N "
+					Reflow_SelectEEProfileIdx(profNum);
+					int idx = 0;
+					char* tok = tempStr;
+					while (idx < NUMPROFILETEMPS && *tok != '\0') {
+						int val = 0;
+						while (*tok >= '0' && *tok <= '9') {
+							val = val * 10 + (*tok - '0');
+							tok++;
+						}
+						Reflow_SetSetpointAtIdx(idx, (uint16_t)val);
+						idx++;
+						if (*tok == ',') tok++;
+						while (*tok == ' ') tok++;
+					}
+					// Zero remaining entries
+					for (int i = idx; i < NUMPROFILETEMPS; i++) {
+						Reflow_SetSetpointAtIdx(i, 0);
+					}
+					Reflow_SaveEEProfile();
+					printf("\nImported %d temperature points to CUSTOM#%d\n", idx, profNum);
+					Reflow_DumpProfile(profNum == 1 ? 5 : 6);
+				} else {
+					printf("\nOnly CUSTOM profile 1 or 2 supported (import profile 1 or 2)\n");
+				}
+
+			} else if (sscanf(serial_cmd, "export profile %d", &param) > 0) {
+				Reflow_ExportProfile(param);
+
+			} else if (strncmp(serial_cmd, "name profile ", 13) == 0) {
+				int profNum = serial_cmd[13] - '0';
+				if ((profNum == 1 || profNum == 2) && serial_cmd[14] == ' ') {
+					Reflow_SetProfileName(profNum, &serial_cmd[15]);
+					printf("\nRenamed CUSTOM#%d to: %s\n", profNum, Reflow_GetProfileName());
+				} else {
+					printf("\nUsage: name profile 1 MyProfile (or 2)\n");
+				}
+
 			} else {
 				printf("\nCannot understand command, ? for help\n");
 			}
@@ -663,29 +730,92 @@ static int32_t Main_Work(void) {
 
 	// Reflow active!
 	} else if (mode == MAIN_REFLOW) {
+		static uint16_t prev_setpoint = 0;
+		static uint8_t alerted_rising = 0;
+		static uint8_t alerted_peak = 0;
+		static uint8_t alerted_cooling = 0;
 
-		if(Reflow_IsDone()){
-			if(animIX==0){
-				Buzzer_Beep(BUZZ_1KHZ, 255, TICKS_MS(100) * NV_GetConfig(REFLOW_BEEP_DONE_LEN));
-				printf("\nReflow %s\n", "completed");
-				animIX=1;
+		// Check for thermal runaway
+		if (Reflow_ThermalRunaway()) {
+			LCD_FB_Clear();
+			showHeader("!! RUNAWAY !!");
+			for(uint8_t n=0;n<128;n++){
+				LCD_SetPixel(n,7);
+				LCD_SetPixel(n,64-9);
+			}
+			len = snprintf(buf, sizeof(buf), "THERMAL RUNAWAY");
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 14, FONT6X6 | INVERT);
+			len = snprintf(buf, sizeof(buf), "TEMP EXCEEDED LIMIT");
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 24, FONT6X6);
+			len = snprintf(buf, sizeof(buf), "HEATER OFF - FAN ON");
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 34, FONT6X6);
+			len = snprintf(buf, sizeof(buf), "TEMP: %.0f`", Sensor_GetTemp(TC_AVERAGE));
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 44, FONT6X6);
+
+			int y = 64 - 7;
+			LCD_disp_str((uint8_t*)" DISMISS ", 9, 91 - 18, y, FONT6X6 | INVERT);
+
+			if (animIX == 0) {
+				Buzzer_Beep(BUZZ_2KHZ, 255, TICKS_MS(2000));
+				animIX = 2; // Use 2 to distinguish from normal done
+			}
+
+			retval = TICKS_MS(250);
+
+			if (keyspressed & KEY_ANY) {
+				Reflow_ClearRunaway();
+				mode = MAIN_HOME;
+				retval = 0;
+			}
+
+		} else {
+			if(Reflow_IsDone()){
+				if(animIX==0){
+					Buzzer_Beep(BUZZ_1KHZ, 255, TICKS_MS(100) * NV_GetConfig(REFLOW_BEEP_DONE_LEN));
+					printf("\nReflow %s\n", "completed");
+					animIX=1;
+					Reflow_SetMode(REFLOW_STANDBY);
+				}
+			}
+
+			// Stage transition buzzer alerts
+			if (NV_GetConfig(REFLOW_BUZZER_ALERTS) && !Reflow_IsDone()) {
+				uint16_t sp = Reflow_GetSetpoint();
+				// Rising: temp passing through profile setpoint upward
+				if (sp > prev_setpoint + 5 && !alerted_rising && sp > 100) {
+					// Temperature is ramping up past 100°C - soak/ramp alert
+					Buzzer_Beep(BUZZ_1KHZ, 200, TICKS_MS(100));
+					alerted_rising = 1;
+				}
+				// Peak: setpoint starts dropping (reflow peak reached)
+				if (prev_setpoint > 0 && sp < prev_setpoint - 3 && !alerted_peak && prev_setpoint > 150) {
+					Buzzer_Beep(BUZZ_2KHZ, 255, TICKS_MS(200));
+					alerted_peak = 1;
+				}
+				// Cooling: temp dropping below 100°C
+				if (alerted_peak && sp < 100 && !alerted_cooling) {
+					Buzzer_Beep(BUZZ_1KHZ, 200, TICKS_MS(150));
+					alerted_cooling = 1;
+				}
+				prev_setpoint = sp;
+			}
+
+			displayReflowScreen(keyspressed,modeChange,animIX);
+			retval = TICKS_MS(100);
+
+			// Abort reflow
+			if (keyspressed & KEY_S) {
+				if(animIX==0){
+					printf("\nReflow %s\n", "interrupted by keypress");
+				}
+				Reflow_ClearRunaway();
+				prev_setpoint = 0;
+				alerted_rising = alerted_peak = alerted_cooling = 0;
+				mode = MAIN_HOME;
 				Reflow_SetMode(REFLOW_STANDBY);
+				retval = 0; // Force immediate refresh
 			}
 		}
-
-		displayReflowScreen(keyspressed,modeChange,animIX);
-		retval = TICKS_MS(100);
-
-		// Abort reflow
-		if (keyspressed & KEY_S) {
-			if(animIX==0){
-				printf("\nReflow %s\n", "interrupted by keypress");
-			}
-			mode = MAIN_HOME;
-			Reflow_SetMode(REFLOW_STANDBY);
-			retval = 0; // Force immediate refresh
-		}
-
 
 
 
@@ -784,7 +914,7 @@ static int32_t Main_Work(void) {
 			LCD_disp_str((uint8_t*)"F2", 2, LCD_ALIGN_RIGHT(2), y, FONT6X6 | INVERT);
 			f2function = '+';
 		}
-		len = snprintf(buf, sizeof(buf), "%c SETPOINT %d` %c", f1function, (int)setpoint, f2function);
+		len = snprintf(buf, sizeof(buf), "%c SETPOINT %d`%s %c", f1function, (int)setpoint, temp_unit(), f2function);
 		LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), y, FONT6X6);
 
 
@@ -820,13 +950,13 @@ static int32_t Main_Work(void) {
 		}
 
 		y = 36;
-		len = snprintf(buf, sizeof(buf), "OVEN TEMP %3.1f`", Sensor_GetTemp(TC_AVERAGE));
+		len = snprintf(buf, sizeof(buf), "OVEN TEMP %3.1f`%s", display_temp(Sensor_GetTemp(TC_AVERAGE)), temp_unit());
 		LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), y, FONT6X6);
 
 		y = 44;
-		len = snprintf(buf, sizeof(buf), "  L %3.1f`", Sensor_GetTemp(TC_LEFT));
+		len = snprintf(buf, sizeof(buf), "  L %3.1f`", display_temp(Sensor_GetTemp(TC_LEFT)));
 		LCD_disp_str((uint8_t*)buf, len, 0, y, FONT6X6);
-		len = snprintf(buf, sizeof(buf), "  R %3.1f`", Sensor_GetTemp(TC_RIGHT));
+		len = snprintf(buf, sizeof(buf), "  R %3.1f`", display_temp(Sensor_GetTemp(TC_RIGHT)));
 		LCD_disp_str((uint8_t*)buf, len, LCD_CENTER, y, FONT6X6);
 
 
@@ -835,11 +965,11 @@ static int32_t Main_Work(void) {
 		if (Sensor_IsValid(TC_EXTRA1) || Sensor_IsValid(TC_EXTRA2)) {
 			y = 42;
 			if (Sensor_IsValid(TC_EXTRA1)) {
-				len = snprintf(buf, sizeof(buf), " X1 %3.1f`", Sensor_GetTemp(TC_EXTRA1));
+				len = snprintf(buf, sizeof(buf), " X1 %3.1f`", display_temp(Sensor_GetTemp(TC_EXTRA1)));
 				LCD_disp_str((uint8_t*)buf, len, 0, y, FONT6X6);
 			}
 			if (Sensor_IsValid(TC_EXTRA2)) {
-				len = snprintf(buf, sizeof(buf), " X2 %3.1f`", Sensor_GetTemp(TC_EXTRA2));
+				len = snprintf(buf, sizeof(buf), " X2 %3.1f`", display_temp(Sensor_GetTemp(TC_EXTRA2)));
 				LCD_disp_str((uint8_t*)buf, len, LCD_CENTER, y, FONT6X6);
 			}
 		}
@@ -850,7 +980,7 @@ static int32_t Main_Work(void) {
 
 		y += 8;
 		if (Sensor_IsValid(TC_COLD_JUNCTION)) {
-			len = snprintf(buf, sizeof(buf), "%3.1f`", Sensor_GetTemp(TC_COLD_JUNCTION));
+			len = snprintf(buf, sizeof(buf), "%3.1f`", display_temp(Sensor_GetTemp(TC_COLD_JUNCTION)));
 		} else {
 			len = snprintf(buf, sizeof(buf), "ERR");
 		}

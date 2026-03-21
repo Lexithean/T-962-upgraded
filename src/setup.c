@@ -38,6 +38,12 @@ static setupMenuStruct setupmenu[] = {
 	{"PID Ki       %5.3f",		PID_TUNE_KI,			 0, 254, 0, 0.002f,	"PID Ki      DEFAULT","PID Ki        0.508"},
 	{"PID Kd        %5.1f",		PID_TUNE_KD,			 0, 254, 0, 0.5f,	"PID Kd      DEFAULT","PID Kd        127.0"},
 	{"Screensaver mins %4.0f",	SCREENSAVER_ACTIVE, 	 0, 60, 0, 1.0f,		"Screensaver       OFF","Screensaver    1 HOUR"},
+	{"Runaway thresh %3.0fC",	SAFETY_RUNAWAY_THRESH,	 0, 50, 0, 1.0f,		"Runaway prot.     OFF","Runaway thresh    50C"},
+	{"Buzzer alerts  %4.0f",	REFLOW_BUZZER_ALERTS,	 0, 1, 0, 1.0f,		"Buzzer alerts     OFF","Buzzer alerts      ON"},
+	{"Max cool rate %3.0f/s",	REFLOW_MAX_COOL_RATE,	 0, 50, 0, 0.1f,		"Max cool rate UNLIMIT","Max cool rate  5.0C/s"},
+	{"L TC hi-off %+1.2f",		TC_LEFT_OFFSET_HI, 	 0, 254, -127, 0.10f,	"L TC hi-off   -12.70","L TC hi-off    12.70"},
+	{"R TC hi-off %+1.2f",		TC_RIGHT_OFFSET_HI, 	 0, 254, -127, 0.10f,	"R TC hi-off   -12.70","R TC hi-off    12.70"},
+	{"Temp unit    %4.0f",		TEMP_UNIT_FAHRENHEIT,	 0, 1, 0, 1.0f,		"Temp unit       DEG C","Temp unit       DEG F"},
 };
 
 #define NUM_SETUP_ITEMS (sizeof(setupmenu) / sizeof(setupmenu[0]))

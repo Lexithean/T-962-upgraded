@@ -52,8 +52,24 @@ static uint16_t numticks = 0;
 
 static int standby_logging = 0;
 
+static int json_output = 0;
+void Reflow_SetJsonOutput(int on) { json_output = on; }
+int Reflow_GetJsonOutput(void) { return json_output; }
+
 uint8_t plotDot[TOTAL_DOTS];
 static int reflowPaused=0;
+
+// Safety: thermal runaway
+static uint8_t runaway_detected = 0;
+static float prev_avgtemp = 0;
+
+// Heater failure detection
+static float heater_start_temp = 0;
+static uint32_t heater_fullheat_ticks = 0;
+static uint8_t heater_failure_warned = 0;
+
+// Cold start detection
+static uint8_t cold_start_logged = 0;
 
 static int32_t Reflow_Work(void) {
 	static ReflowMode_t oldmode = REFLOW_INITIAL;
@@ -101,6 +117,67 @@ static int32_t Reflow_Work(void) {
 	Set_Heater(heat);
 	Set_Fan(fan);
 
+	// Thermal runaway detection: abort if temp exceeds setpoint + threshold
+	if ((mymode == REFLOW_REFLOW || mymode == REFLOW_BAKE) && intsetpoint > 0) {
+		uint8_t thresh = NV_GetConfig(SAFETY_RUNAWAY_THRESH);
+		if (thresh > 0 && thresh < 255 && avgtemp > (float)(intsetpoint + thresh)) {
+			printf("\n*** THERMAL RUNAWAY: %.1fC > %d+%dC setpoint! ***",
+			       avgtemp, intsetpoint, thresh);
+			runaway_detected = 1;
+			reflowdone = 1;
+			Reflow_SetMode(REFLOW_STANDBY);
+		}
+	}
+
+	// Cooling rate control: limit fan when cooling too fast
+	if ((mymode == REFLOW_REFLOW || mymode == REFLOW_BAKE) && fan > 0) {
+		uint8_t maxrate_nv = NV_GetConfig(REFLOW_MAX_COOL_RATE);
+		if (maxrate_nv > 0 && maxrate_nv < 255) {
+			// maxrate_nv * 0.1 = max degrees per second
+			// Compare temp drop over last PID cycle (250ms)
+			float drop_per_sec = (prev_avgtemp - avgtemp) * (float)TICKS_PER_SECOND;
+			float max_rate = (float)maxrate_nv * 0.1f;
+			if (drop_per_sec > max_rate && prev_avgtemp > 0) {
+				// Cooling too fast: reduce fan to minimum
+				Set_Fan(NV_GetConfig(REFLOW_MIN_FAN_SPEED));
+			}
+		}
+	}
+	prev_avgtemp = avgtemp;
+
+	// Cold start logging
+	if (!cold_start_logged && (mymode == REFLOW_REFLOW || mymode == REFLOW_BAKE)) {
+		printf("\n[INFO] Starting at %.1fC (%s start)",
+		       avgtemp, avgtemp < 40.0f ? "cold" : "warm");
+		cold_start_logged = 1;
+	} else if (cold_start_logged && mymode == REFLOW_STANDBY) {
+		cold_start_logged = 0;
+		heater_failure_warned = 0;
+	}
+
+	// Heater element failure detection
+	// If heater is at 100% for 30s and temp hasn't risen 5°C, warn
+	if (heat == 255 && (mymode == REFLOW_REFLOW || mymode == REFLOW_BAKE)) {
+		if (heater_fullheat_ticks == 0) {
+			heater_start_temp = avgtemp;
+			heater_fullheat_ticks = numticks;
+		}
+		// Check after 30 seconds of continuous full heat (120 ticks at 4Hz)
+		if (!heater_failure_warned && numticks > heater_fullheat_ticks + 120) {
+			if (avgtemp < heater_start_temp + 5.0f) {
+				printf("\n[WARNING] HEATER FAILURE? Temp hasn't risen in 30s of full heat!");
+				printf("\n[WARNING] Start: %.1fC Now: %.1fC - Check SSR/element",
+				       heater_start_temp, avgtemp);
+				heater_failure_warned = 1;
+			} else {
+				// Reset - temp is rising, heater is working
+				heater_fullheat_ticks = 0;
+			}
+		}
+	} else {
+		heater_fullheat_ticks = 0;
+	}
+
 	if (mymode != oldmode) {
 		printf("\n# Time,  Temp0, Temp1, Temp2, Temp3,  Set,Actual, Heat, Fan,  ColdJ, Mode");
 		oldmode = mymode;
@@ -123,16 +200,30 @@ static int32_t Reflow_Work(void) {
 	}
 
 	if (!(mymode == REFLOW_STANDBY && standby_logging == 0)) {
-		printf("\n%6.1f,  %5.1f, %5.1f, %5.1f, %5.1f,  %3u, %5.1f,  %3u, %3u,  %5.1f, %s",
-		       ((float)numticks / TICKS_PER_SECOND),
-		       Sensor_GetTemp(TC_LEFT),
-		       Sensor_GetTemp(TC_RIGHT),
-		       Sensor_GetTemp(TC_EXTRA1),
-		       Sensor_GetTemp(TC_EXTRA2),
-		       intsetpoint, avgtemp,
-		       heat, fan,
-		       Sensor_GetTemp(TC_COLD_JUNCTION),
-		       modestr);
+		if (json_output) {
+			printf("\n{\"t\":%.1f,\"tc0\":%.1f,\"tc1\":%.1f,\"tc2\":%.1f,\"tc3\":%.1f,"
+			       "\"set\":%u,\"act\":%.1f,\"heat\":%u,\"fan\":%u,\"cj\":%.1f,\"mode\":\"%s\"}",
+			       ((float)numticks / TICKS_PER_SECOND),
+			       Sensor_GetTemp(TC_LEFT),
+			       Sensor_GetTemp(TC_RIGHT),
+			       Sensor_GetTemp(TC_EXTRA1),
+			       Sensor_GetTemp(TC_EXTRA2),
+			       intsetpoint, avgtemp,
+			       heat, fan,
+			       Sensor_GetTemp(TC_COLD_JUNCTION),
+			       modestr);
+		} else {
+			printf("\n%6.1f,  %5.1f, %5.1f, %5.1f, %5.1f,  %3u, %5.1f,  %3u, %3u,  %5.1f, %s",
+			       ((float)numticks / TICKS_PER_SECOND),
+			       Sensor_GetTemp(TC_LEFT),
+			       Sensor_GetTemp(TC_RIGHT),
+			       Sensor_GetTemp(TC_EXTRA1),
+			       Sensor_GetTemp(TC_EXTRA2),
+			       intsetpoint, avgtemp,
+			       heat, fan,
+			       Sensor_GetTemp(TC_COLD_JUNCTION),
+			       modestr);
+		}
 	}
 
 	if (numticks & 1) {
@@ -263,6 +354,27 @@ int Reflow_GetTimeLeft(void) {
 		return -1;
 	}
 	return (bake_timer - numticks) / TICKS_PER_SECOND;
+}
+
+// Safety: thermal runaway
+uint8_t Reflow_ThermalRunaway(void) { return runaway_detected; }
+void Reflow_ClearRunaway(void) { runaway_detected = 0; }
+
+// Profile timing
+int Reflow_GetProfileDuration(void) {
+	// Find last non-zero profile entry, multiply index by 10 for seconds
+	int last = 0;
+	for (int i = NUMPROFILETEMPS - 1; i >= 0; i--) {
+		if (Reflow_GetSetpointAtIdx(i) > 0) {
+			last = i;
+			break;
+		}
+	}
+	return last * 10;
+}
+
+int Reflow_GetElapsedTime(void) {
+	return (int)(numticks / TICKS_PER_SECOND);
 }
 
 // returns -1 if the reflow process is done.

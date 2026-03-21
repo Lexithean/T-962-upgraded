@@ -25,9 +25,19 @@ This fork merges the following improvements from upstream pull requests that wer
 - **Bang-bang auto-tune** — Runs 3 heat/cool cycles to measure thermal overshoot/undershoot, stores anticipatory offsets with live temperature graph (fork addition)
 - **PID auto-tune** — Ziegler-Nichols relay method, measures oscillation period/amplitude over 3 cycles to compute optimal Kp/Ki/Kd with live graph (fork addition)
 - **TC offset auto-calibration** — Uses cold junction sensor as reference at ambient temperature to auto-zero both thermocouples (fork addition)
+- **Two-point TC calibration** — Separate ambient and high-temp (200°C) offsets per TC, linear interpolation across temperature range for improved accuracy (fork addition)
 - All calibration modes accessible from setup menu or via serial commands (`bbtune`, `pidtune`, `tccal`)
 
+### Safety & Control
+- **Thermal runaway protection** — Aborts reflow/bake if temperature exceeds setpoint by a configurable threshold (0–50°C), with alarm buzzer and error screen (fork addition)
+- **Heater failure detection** — Serial warning if temperature doesn't rise 5°C in 30s of full heat output (broken SSR/element detection) (fork addition)
+- **Cooling rate control** — Limits fan speed to prevent thermal shock when cooling rate exceeds a configurable max (0–5.0°C/s) (fork addition)
+- **Audible stage alerts** — Buzzer beeps at ramp start (>100°C), reflow peak, and cooldown (<100°C) transitions (fork addition)
+- **Time remaining** — Countdown timer shown on reflow graph display (fork addition)
+- **Cold start detection** — Logs starting temperature and cold/warm status at reflow/bake start (fork addition)
+
 ### UI Improvements
+- **°C/°F temperature toggle** — Display temperatures in Celsius or Fahrenheit via settings menu (fork addition)
 - **Improved About screen** with version info and credits (#159)
 - **Screensaver** with configurable timeout (#159)
 - **Setup menu min/max labels** — Shows human-readable limits at range boundaries (#159)
@@ -38,6 +48,10 @@ This fork merges the following improvements from upstream pull requests that wer
 - **1-wire temperature sensor support** — DS18B20, DS18S20, and DS1822 all supported for cold junction compensation (#148)
 - **Binary serial command interface** — CRC-validated protocol for uploading custom profiles via UART (#136)
 - **Serial calibration commands** — `bbtune`, `pidtune`, `tccal` for headless auto-calibration via UART (fork addition)
+- **Serial JSON output** — `json` command toggles machine-readable JSON output for PC graphing/logging tools (fork addition)
+- **Text-based profile import** — `import profile N t1,t2,...` for easy profile upload without binary protocol (fork addition)
+- **Profile export** — `export profile N` outputs in import-compatible format for round-trip editing (fork addition)
+- **Profile naming** — `name profile N <name>` renames CUSTOM profile slots (fork addition)
 - **PlatformIO support** — Build with `pio run` in addition to `make` (#207)
 
 ### Build & CI
