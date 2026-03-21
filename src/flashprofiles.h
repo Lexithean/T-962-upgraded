@@ -9,7 +9,7 @@
 #define FLASH_PROFILE_BASE       0x1E000
 #define FLASH_PROFILE_END        0x20000
 #define FLASH_PROFILE_BLOCK_SIZE 256
-#define FLASH_PROFILE_MAX_SLOTS  30      // Reasonable cap (could fit 128)
+#define FLASH_PROFILE_MAX_SLOTS  6       // Keep low to save RAM (16KB MCU)
 #define FLASH_PROFILE_NAME_LEN   20      // Including null terminator
 #define FLASH_PROFILE_MAGIC      0x50524F46  // "PROF"
 
