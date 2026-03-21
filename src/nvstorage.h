@@ -35,6 +35,8 @@ typedef enum eNVItem {
 	TC_LEFT_OFFSET_HI,		// High-temp offset at 200°C (same encoding as TC_LEFT_OFFSET)
 	TC_RIGHT_OFFSET_HI,	// High-temp offset at 200°C (same encoding as TC_RIGHT_OFFSET)
 
+	TEMP_UNIT_FAHRENHEIT,	// 0=Celsius, 1=Fahrenheit display
+
 	NVITEM_NUM_ITEMS // Last value
 } NVItem_t;
 

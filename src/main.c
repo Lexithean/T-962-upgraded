@@ -92,6 +92,20 @@ static char* help_text = \
 "\n";
 
 
+static float display_temp(float celsius) {
+	if (NV_GetConfig(TEMP_UNIT_FAHRENHEIT) == 1) {
+		return celsius * 9.0f / 5.0f + 32.0f;
+	}
+	return celsius;
+}
+
+static const char* temp_unit(void) {
+	if (NV_GetConfig(TEMP_UNIT_FAHRENHEIT) == 1) {
+		return "F";
+	}
+	return "C";
+}
+
 static int32_t Main_Work(void);
 
 int main(void) {
@@ -900,7 +914,7 @@ static int32_t Main_Work(void) {
 			LCD_disp_str((uint8_t*)"F2", 2, LCD_ALIGN_RIGHT(2), y, FONT6X6 | INVERT);
 			f2function = '+';
 		}
-		len = snprintf(buf, sizeof(buf), "%c SETPOINT %d` %c", f1function, (int)setpoint, f2function);
+		len = snprintf(buf, sizeof(buf), "%c SETPOINT %d`%s %c", f1function, (int)setpoint, temp_unit(), f2function);
 		LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), y, FONT6X6);
 
 
@@ -936,13 +950,13 @@ static int32_t Main_Work(void) {
 		}
 
 		y = 36;
-		len = snprintf(buf, sizeof(buf), "OVEN TEMP %3.1f`", Sensor_GetTemp(TC_AVERAGE));
+		len = snprintf(buf, sizeof(buf), "OVEN TEMP %3.1f`%s", display_temp(Sensor_GetTemp(TC_AVERAGE)), temp_unit());
 		LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), y, FONT6X6);
 
 		y = 44;
-		len = snprintf(buf, sizeof(buf), "  L %3.1f`", Sensor_GetTemp(TC_LEFT));
+		len = snprintf(buf, sizeof(buf), "  L %3.1f`", display_temp(Sensor_GetTemp(TC_LEFT)));
 		LCD_disp_str((uint8_t*)buf, len, 0, y, FONT6X6);
-		len = snprintf(buf, sizeof(buf), "  R %3.1f`", Sensor_GetTemp(TC_RIGHT));
+		len = snprintf(buf, sizeof(buf), "  R %3.1f`", display_temp(Sensor_GetTemp(TC_RIGHT)));
 		LCD_disp_str((uint8_t*)buf, len, LCD_CENTER, y, FONT6X6);
 
 
@@ -951,11 +965,11 @@ static int32_t Main_Work(void) {
 		if (Sensor_IsValid(TC_EXTRA1) || Sensor_IsValid(TC_EXTRA2)) {
 			y = 42;
 			if (Sensor_IsValid(TC_EXTRA1)) {
-				len = snprintf(buf, sizeof(buf), " X1 %3.1f`", Sensor_GetTemp(TC_EXTRA1));
+				len = snprintf(buf, sizeof(buf), " X1 %3.1f`", display_temp(Sensor_GetTemp(TC_EXTRA1)));
 				LCD_disp_str((uint8_t*)buf, len, 0, y, FONT6X6);
 			}
 			if (Sensor_IsValid(TC_EXTRA2)) {
-				len = snprintf(buf, sizeof(buf), " X2 %3.1f`", Sensor_GetTemp(TC_EXTRA2));
+				len = snprintf(buf, sizeof(buf), " X2 %3.1f`", display_temp(Sensor_GetTemp(TC_EXTRA2)));
 				LCD_disp_str((uint8_t*)buf, len, LCD_CENTER, y, FONT6X6);
 			}
 		}
@@ -966,7 +980,7 @@ static int32_t Main_Work(void) {
 
 		y += 8;
 		if (Sensor_IsValid(TC_COLD_JUNCTION)) {
-			len = snprintf(buf, sizeof(buf), "%3.1f`", Sensor_GetTemp(TC_COLD_JUNCTION));
+			len = snprintf(buf, sizeof(buf), "%3.1f`", display_temp(Sensor_GetTemp(TC_COLD_JUNCTION)));
 		} else {
 			len = snprintf(buf, sizeof(buf), "ERR");
 		}
