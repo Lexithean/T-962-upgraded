@@ -25,6 +25,7 @@ This fork merges the following improvements from upstream pull requests that wer
 - **Bang-bang auto-tune** — Runs 3 heat/cool cycles to measure thermal overshoot/undershoot, stores anticipatory offsets with live temperature graph (fork addition)
 - **PID auto-tune** — Ziegler-Nichols relay method, measures oscillation period/amplitude over 3 cycles to compute optimal Kp/Ki/Kd with live graph (fork addition)
 - **TC offset auto-calibration** — Uses cold junction sensor as reference at ambient temperature to auto-zero both thermocouples (fork addition)
+- **Two-point TC calibration** — Separate ambient and high-temp (200°C) offsets per TC, linear interpolation across temperature range for improved accuracy (fork addition)
 - All calibration modes accessible from setup menu or via serial commands (`bbtune`, `pidtune`, `tccal`)
 
 ### Safety & Control
@@ -44,6 +45,8 @@ This fork merges the following improvements from upstream pull requests that wer
 - **1-wire temperature sensor support** — DS18B20, DS18S20, and DS1822 all supported for cold junction compensation (#148)
 - **Binary serial command interface** — CRC-validated protocol for uploading custom profiles via UART (#136)
 - **Serial calibration commands** — `bbtune`, `pidtune`, `tccal` for headless auto-calibration via UART (fork addition)
+- **Serial JSON output** — `json` command toggles machine-readable JSON output for PC graphing/logging tools (fork addition)
+- **Text-based profile import** — `import profile N t1,t2,...` for easy profile upload without binary protocol (fork addition)
 - **PlatformIO support** — Build with `pio run` in addition to `make` (#207)
 
 ### Build & CI
