@@ -776,17 +776,17 @@ static int32_t Main_Work(void) {
 			}
 
 
-			len = snprintf(buf, sizeof(buf), "T-962 OVEN");
+			len = snprintf(buf, sizeof(buf), "REFLOWOS");
 			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_RIGHT(len), 20, FONT6X6);
-			len = snprintf(buf, sizeof(buf), "SMASHCAT UI");
+			len = snprintf(buf, sizeof(buf), "BY SCHEMARA.COM");
 			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_RIGHT(len), 28, FONT6X6);
-			len = snprintf(buf, sizeof(buf), "%s", Version_GetGitVersion());
+			len = snprintf(buf, sizeof(buf), "VER %s", Version_GetGitVersion());
 			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_RIGHT(len), 36, FONT6X6);
 			len = snprintf(buf, sizeof(buf), "UNIFIED ENGINEERING");
 			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_RIGHT(len), 44, FONT6X6);
 
-			LCD_disp_str((uint8_t*)"  ", 2, 128-12, 64-7, FONT6X6 | INVERT);
-			LCD_disp_str((uint8_t*)"S", 1, 128-9, 64-7, FONT6X6 | INVERT);
+			LCD_disp_str((uint8_t*)"  ", 2, 128-12, 64-10, FONT6X6 | INVERT);
+			LCD_disp_str((uint8_t*)"S", 1, 128-9, 64-10, FONT6X6 | INVERT);
 
 		}
 		retval = TICKS_MS(100);
