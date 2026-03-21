@@ -37,6 +37,7 @@ This fork merges the following improvements from upstream pull requests that wer
 - **Cold start detection** — Logs starting temperature and cold/warm status at reflow/bake start (fork addition)
 
 ### UI Improvements
+- **°C/°F temperature toggle** — Display temperatures in Celsius or Fahrenheit via settings menu (fork addition)
 - **Improved About screen** with version info and credits (#159)
 - **Screensaver** with configurable timeout (#159)
 - **Setup menu min/max labels** — Shows human-readable limits at range boundaries (#159)
