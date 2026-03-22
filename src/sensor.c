@@ -119,9 +119,17 @@ void Sensor_ValidateNV(void) {
 	adcoffsetadj_hi[1] = ((float)(temp - 127)) * 0.5f;
 
 	temp = NV_GetConfig(OP_MODE);
+	if (temp >= 3) { // Only 0=AMBIENT, 1=MAXTEMPOVERRIDE, 2=SPLIT are valid
+		temp = 0; // Default to AMBIENT
+		NV_SetConfig(OP_MODE, temp);
+	}
 	opMode = (OperationMode_t)temp;
 
 	temp = NV_GetConfig(MODE_THRESH);
+	if (temp == 255) {
+		temp = 5; // Default 5C threshold
+		NV_SetConfig(MODE_THRESH, temp);
+	}
 	opModeTempThresh = temp;
 }
 
