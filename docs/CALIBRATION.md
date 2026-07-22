@@ -94,9 +94,11 @@ heat and cool early enough to hit the target.
 1. Insert a scrap PCB for representative thermal mass.
 2. Start it from Setup (a *Bang-bang* row, then **S**, then **F1 (START)**), or with
    the serial command `bbtune`.
-3. It runs three heat and cool cycles between target temperatures, drawing a live
+3. It runs three heat and cool cycles between 150 °C and 200 °C, drawing a live
    graph with the target band dotted and your temperature traced over it.
 4. When it finishes, it prints and stores the measured offsets.
+
+Your oven needs to be able to reach about 200 °C for this to work.
 
 ---
 
@@ -105,9 +107,9 @@ heat and cool early enough to hit the target.
 This needs **Bang-bang heat** (#7) set to off.
 
 It uses the Ziegler-Nichols relay method. The firmware drives the heater as a relay
-around a target, measures the natural oscillation period and amplitude over three
-cycles, and computes the optimal Kp, Ki, and Kd. It writes those to settings #10
-through #12.
+around a 200 °C target, measures the natural oscillation period and amplitude over
+three cycles, and computes the optimal Kp, Ki, and Kd. It writes those to settings
+#10 through #12. The built-in defaults it replaces are Kp 20.0, Ki 0.016, Kd 62.5.
 
 <img src="images/18-pidtune-prompt.png" width="380" alt="PID tune prompt">
 <img src="images/19-pidtune-running.png" width="380" alt="PID tune running">
@@ -122,10 +124,10 @@ To go back to the built-in tuning, set PID Kp, Ki, and Kd back to `DEFAULT` (or 
 
 ### Safety during tuning
 
-Both tune routines have a per-phase timeout. If a phase stalls, say the oven cannot
-reach the target, or it has cooled to ambient with no rebound, the tune aborts
-cleanly with the heater off instead of hanging. The absolute over-temperature
-cutoff stays active throughout.
+Both tune routines have a per-phase timeout of about 15 minutes. If a phase stalls,
+say the oven cannot reach the target, or it has cooled to ambient with no rebound,
+the tune aborts cleanly with the heater off instead of hanging. The absolute
+over-temperature cutoff stays active throughout.
 
 ---
 

@@ -55,7 +55,9 @@ To put the oven into ISP mode, either hold the F1 key while you power it on, or 
 `enter isp` on the serial console. The `enter isp` route also backs up your flash
 profiles and turns the heater and fan off first.
 
-Then flash with your tool of choice:
+The bootloader communicates at **57600 baud** (not the 115200 the normal console
+uses). The upload tools below already know this. Then flash with your tool of
+choice:
 
 ```bash
 pio run -t upload
@@ -63,7 +65,8 @@ pio run -t upload
 make flash
 ```
 
-Reconnect at the normal 115200 baud and power-cycle the oven when you are done.
+When you are done, power-cycle the oven. It boots the new firmware and the console
+returns to the normal 115200 baud.
 
 ---
 

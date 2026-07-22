@@ -1,8 +1,8 @@
 # Reflow Profiles
 
 A profile is the temperature curve the oven follows during a reflow. It is 48
-setpoints spaced 10 seconds apart, for a run of up to 480 seconds. ReflowOS gives
-you three kinds of profile storage.
+setpoints spaced 10 seconds apart, so it runs from 0:00 to 7:50 (470 seconds).
+ReflowOS gives you three kinds of profile storage.
 
 <img src="images/06-select-profile.png" width="440" alt="A profile plotted on the oven">
 
@@ -62,7 +62,9 @@ delete flash 5
 
 Flash profiles show up in the on-oven profile selector alongside the built-ins, so
 you can save a library of pastes and pick them from the front panel. Two Loctite
-profiles are preloaded into slots 30 and 31 on first boot as examples.
+profiles are preloaded into slots 30 and 31 on first boot as examples. (These same
+two curves also ship as the built-in profiles GC 10 and GC 50 at ids 4 and 5, so
+you may see them listed twice, once as built-ins and once as flash profiles.)
 
 > ⚠️ Flash profiles are erased when you reflash the firmware. Run
 > [`backup`](#backup-and-restore) first. EEPROM CUSTOM profiles survive an update;
@@ -85,7 +87,7 @@ From the profile selector (**F4**), highlight CUSTOM #1 or #2 and press **F3**:
 
 | Key | Action |
 |-----|--------|
-| **F1 / F2** | Move to the previous or next time point (0:00 up to 7:50) |
+| **F1 / F2** | Move to the previous or next time point (0:00 up to 7:50, 48 points) |
 | **F3 / F4** | Lower or raise the setpoint at the cursor (0 to 300 °C, hold to accelerate) |
 | **S** | Save to EEPROM and return |
 

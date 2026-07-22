@@ -40,6 +40,7 @@ and schematic tools by Lexithean.
 | 🔌 **[Serial Reference](docs/SERIAL.md)** | The full command set, CSV/JSON telemetry, headless control. |
 | 🛡️ **[Safety Features](docs/SAFETY.md)** | Runaway protection, absolute cutoff, heater-failure detection, watchdog. |
 | 🔧 **[Building & Flashing](docs/BUILDING.md)** | Toolchains, flashing the oven, first boot, safe updates. |
+| 🩺 **[Troubleshooting, FAQ & Glossary](docs/TROUBLESHOOTING.md)** | Common problems and fixes, frequently asked questions, and a terms glossary. |
 
 ---
 

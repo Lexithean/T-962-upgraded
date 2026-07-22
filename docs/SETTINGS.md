@@ -22,20 +22,20 @@ values are rejected or clamped.
 | 3 | **Left TC offset** | plus or minus 63.50 °C, 0.5 °C steps | +0.00 | Additive offset for the left thermocouple at ambient (low temperature). |
 | 4 | **Right TC gain** | 0.10 to 1.90 | 1.00 | Gain correction for the right thermocouple. |
 | 5 | **Right TC offset** | plus or minus 63.50 °C, 0.5 °C steps | +0.00 | Ambient offset for the right thermocouple. |
-| 6 | **Preheat temp** | 30 to 80 °C | 50 °C | The temperature the oven soaks at before the reflow profile clock starts. |
+| 6 | **Preheat temp** | 30 to 80 °C | 50 °C | The temperature the oven soaks at before the reflow profile clock starts. At the minimum (30) preheat is effectively disabled and the profile starts immediately. |
 | 7 | **Bang-bang heat** | OFF / ON | OFF | Selects bang-bang (on/off heater) control instead of PID. Strongly recommended for the T-962C. See [Calibration](CALIBRATION.md#control-modes-pid-vs-bang-bang). |
 | 8 | **BB heat offset** | 0 to 25 °C | 0 | How early bang-bang cuts the heater to account for lag. Set by bang-bang auto-tune. |
 | 9 | **BB cool offset** | 0 to 25 °C | 0 | The equivalent anticipatory margin for cooling. Set by auto-tune. |
 | 10 | **PID Kp** | DEFAULT, or 0 to 127.0 | DEFAULT | PID proportional gain. `DEFAULT` uses the built-in tuning; any value you set overrides it. |
 | 11 | **PID Ki** | DEFAULT, or 0 to 0.508 | DEFAULT | PID integral gain. |
 | 12 | **PID Kd** | DEFAULT, or 0 to 127.0 | DEFAULT | PID derivative gain. |
-| 13 | **Screensaver mins** | OFF to 60 min | OFF | Blank the LCD after this many minutes of inactivity. Any key wakes it. |
+| 13 | **Screensaver mins** | OFF to 60 min | OFF | Start the animated Pac-Man screensaver after this many minutes of inactivity. Any key returns to the menu. |
 | 14 | **Runaway thresh** | OFF to 50 °C | 30 °C | The thermal-runaway abort margin above setpoint. `OFF` disables the relative check, but the absolute 280 °C ceiling still applies. See [Safety](SAFETY.md). |
-| 15 | **Buzzer alerts** | OFF / ON | ON | Stage-transition beeps during a reflow (ramp, peak, cooling). |
+| 15 | **Buzzer alerts** | OFF / ON | ON | Stage-transition beeps during a reflow (ramp, peak, cooling). Turning this off also silences the reflow-completion melody and the thermal-runaway alarm melody. (The runaway screen still emits a plain warning beep.) |
 | 16 | **Max cool rate** | UNLIMIT to 5.0 °C/s, 0.1 steps | UNLIMIT | Caps the fan to limit the cooldown rate and reduce thermal shock. `UNLIMIT` means no limit. |
 | 17 | **L TC hi-off** | plus or minus 63.50 °C, 0.5 °C steps | tracks #3 | The left thermocouple offset at high temperature (200 °C reference), for two-point calibration. |
 | 18 | **R TC hi-off** | plus or minus 63.50 °C, 0.5 °C steps | tracks #5 | The right thermocouple high-temperature offset. |
-| 19 | **Temp unit** | DEG C / DEG F | DEG C | The display unit. It affects the on-screen and serial temperatures. Control is always Celsius underneath. |
+| 19 | **Temp unit** | DEG C / DEG F | DEG C | The LCD display unit. It affects the on-screen temperatures only. Serial telemetry, `values`, and `about` are always in Celsius, and control is always Celsius underneath. |
 | 20 | **Fan kickstart** | OFF / ON | OFF | Fires a 250 ms full-power fan pulse when the fan first turns on, to break a low-speed stall. |
 | . | **Factory Reset** | . | . | The virtual bottom entry. Press **S** to restore every setting above to its default. |
 
@@ -56,8 +56,9 @@ and the correction actually applied are on the same 0.5 °C-per-step scale.
 ### PID gains (#10 to #12)
 
 Leave these at `DEFAULT` unless you have run [PID auto-tune](CALIBRATION.md#pid-auto-tune)
-or are tuning by hand. Auto-tune writes computed values here, and `factory reset`
-returns them to `DEFAULT`.
+or are tuning by hand. The built-in defaults are Kp 20.0, Ki 0.016, Kd 62.5.
+Auto-tune writes computed values here, and `factory reset` returns them to
+`DEFAULT`.
 
 ### Bang-bang offsets (#8/#9)
 

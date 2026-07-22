@@ -105,8 +105,11 @@ buzzer, and shows the post-reflow analytics:
 | **TAL (>217)** | Time above liquidus, in seconds spent above 217 °C (the SAC305 liquidus point) |
 | **MAX RAMP** | Fastest heating rate observed, in °C/s |
 
-Press **F4** for the menu or **S** to stop. Use these numbers to judge whether the
-run matched the reflow spec for your solder paste.
+These same analytics are also tracked during a bake, not just a reflow.
+
+Press **S** to return. (The screen reads "Press F4 for menu", but only **S**
+actually dismisses it.) Use these numbers to judge whether the run matched the
+reflow spec for your solder paste.
 
 ### If something goes wrong
 
@@ -132,10 +135,17 @@ handy for drying boards, curing, or preheating.
 | **F3 / F4** | Decrease or increase the timer |
 | **S** | Stop and return to the menu |
 
-The timer counts down only after the oven reaches setpoint, showing `PREHEAT`
-until then. When it expires, the oven beeps and returns to standby. Set the timer
-to zero for an untimed bake that holds until you stop it. Timers up to 36 hours
-are supported and expire reliably, so an overnight bake shuts itself off.
+The timer has three states, shown in the display:
+
+- A positive time counts down, but only after the oven reaches setpoint (it shows
+  `PREHEAT` until then). When it expires the oven beeps and returns to standby.
+- `inf TIMER` (timer at zero) holds the temperature indefinitely until you stop it.
+- `no timer` (timer below zero) also holds indefinitely, with no countdown shown.
+
+Timers up to 36 hours are supported and expire reliably, so an overnight bake
+shuts itself off. Alongside the main oven temperature, the screen also shows the
+left and right thermocouples, the cold-junction temperature, and the extra X1/X2
+thermocouples if you have them fitted.
 
 The display honours your temperature unit setting. In Fahrenheit mode the setpoint
 and all readings appear in °F, while the oven is still controlled correctly
@@ -172,7 +182,8 @@ From the profile selector, choose CUSTOM #1 or CUSTOM #2 and press **F3**.
 
 <img src="images/09-edit-profile.png" width="440" alt="Profile editor">
 
-A profile is 48 setpoints spaced 10 seconds apart, for up to 480 seconds total.
+A profile is 48 setpoints spaced 10 seconds apart, so it runs from 0:00 to 7:50
+(470 seconds).
 
 | Key | Action |
 |-----|--------|
@@ -214,9 +225,12 @@ The [Settings Reference](SETTINGS.md) documents every setting.
 
 On certain rows, pressing **S** starts a routine instead of exiting:
 
-- The **Left/Right TC offset** rows launch [TC offset auto-calibration](CALIBRATION.md#thermocouple-offset-auto-calibration).
-- The **bang-bang** rows (when bang-bang mode is on) launch [bang-bang auto-tune](CALIBRATION.md#bang-bang-auto-tune).
-- The **PID** rows (when bang-bang mode is off) launch [PID auto-tune](CALIBRATION.md#pid-auto-tune).
+- The **ambient Left/Right TC offset** rows (#3 and #5, not the hi-off rows)
+  launch [TC offset auto-calibration](CALIBRATION.md#thermocouple-offset-auto-calibration).
+- The **bang-bang** rows (#7 to #9, when bang-bang mode is on) launch
+  [bang-bang auto-tune](CALIBRATION.md#bang-bang-auto-tune).
+- The **PID** rows (#10 to #12, when bang-bang mode is off) launch
+  [PID auto-tune](CALIBRATION.md#pid-auto-tune).
 
 ---
 
@@ -259,6 +273,12 @@ stamped in at compile time.
 
 ## Screensaver
 
-If **Screensaver mins** (Setup) is set to a non-zero value, the display blanks
-after that many minutes of inactivity to protect the LCD. Any keypress wakes it.
-Set it to `OFF` to disable it.
+If **Screensaver mins** (Setup) is set to a non-zero value, an animated Pac-Man
+screensaver takes over after that many minutes of inactivity, complete with
+chasing ghosts and a score counter. Any keypress returns you to the menu. Set it
+to `OFF` to disable it.
+
+<img src="images/20-screensaver.png" width="440" alt="Pac-Man screensaver">
+
+The setting takes effect the next time you return to the main menu (or on the
+next boot), so after changing it in Setup, back out to the menu.

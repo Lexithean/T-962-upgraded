@@ -13,7 +13,8 @@ Monitor, or the [`serial-control.py`](../serial-control.py) helper).
 
 ## Command summary
 
-Type `help` (or `?`) on the oven console to print this list:
+Type `help` (or `?`) on the oven console to print most of these. A few real
+commands are not listed by `help`: `enter isp`, `get OpMode`, and `get OpThresh`.
 
 | Command | Description |
 |---------|-------------|
@@ -30,7 +31,9 @@ Type `help` (or `?`) on the oven console to print this list:
 | `stop` | Exit reflow or bake |
 | `setting <id> <value>` | Set a menu setting (see [Settings](SETTINGS.md)) |
 | `set OpMode <0-2>` | Set the control source mode |
+| `get OpMode` | Print the current control source mode |
 | `set OpThresh <0-255>` | Set the mode threshold in °C |
+| `get OpThresh` | Print the current mode threshold |
 | `dump profile <id>` | Print a profile's 48 temperature points |
 | `export profile <id>` | Print a profile in import-compatible form |
 | `import profile <1 or 2> t,t,...` | Import points into CUSTOM #1 or #2 (EEPROM) |
@@ -50,8 +53,15 @@ Type `help` (or `?`) on the oven console to print this list:
 
 ## Telemetry
 
-While a reflow or bake runs (and in standby, unless you silence it with `quiet`),
-the oven streams one telemetry line per control cycle, about 4 times a second.
+While a reflow or bake runs, the oven streams one telemetry line per control
+cycle, about 4 times a second. In standby it is quiet by default (only the
+one-off header line is printed). The `quiet` command toggles standby streaming
+*on*, so the name is a little counterintuitive: run `quiet` once to start seeing
+standby data rows.
+
+At the start of every reflow or bake, the oven also logs a cold-start line such
+as `[INFO] Starting at 24.3C (cold start)`. Below 40 °C it is classed "cold",
+otherwise "warm".
 
 ### CSV (the default)
 
@@ -83,8 +93,8 @@ Run `json` to switch to machine-readable output for logging and graphing tools:
 
 Run `json` again to switch back to CSV.
 
-> Telemetry temperatures follow your **Temp unit** setting. Set it to °C for
-> logging unless you specifically want °F.
+> Telemetry, `values`, and `about` temperatures are **always Celsius**. The
+> **Temp unit** setting changes the on-oven LCD only, not the serial output.
 
 ---
 
@@ -168,6 +178,24 @@ hardware each mode needs.
 ## Firmware update (ISP)
 
 `enter isp` gets the oven ready for flashing. It backs up flash profiles to the
-console, turns the heater and fan off, and jumps to the LPC bootloader. After it
-runs, reconnect your flashing tool, program the new firmware, and power-cycle the
-oven. See [Building & Flashing](BUILDING.md).
+console, turns the heater and fan off, and jumps to the LPC bootloader with
+interrupts disabled. After it runs, reconnect your flashing tool **at 57600 baud**
+(the bootloader's rate, not the 115200 console rate), program the new firmware,
+and power-cycle the oven. See [Building & Flashing](BUILDING.md).
+
+---
+
+## Helper script and binary protocol
+
+The repo ships [`serial-control.py`](../serial-control.py), a small helper for
+driving the oven from a PC. It also exercises the binary "advanced command"
+protocol, a framed alternative to the text `import` command for uploading a
+profile:
+
+- Frame: sync bytes `0xFF 0x55`, a size byte, a header checksum, a command byte
+  (`0xEE` = set EEPROM profile), the payload (profile number plus 48 big-endian
+  temperatures), and a data checksum.
+- The oven replies with an ACK byte (`0x85`) when it accepts a frame.
+
+For everyday use the text commands above are easier; the binary protocol exists
+for tools that want checksummed uploads.
