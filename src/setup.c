@@ -111,6 +111,10 @@ void Setup_printFormattedValue(int item) {
 		printf(">> FACTORY RESET <<");
 		return;
 	}
+	if (_getRawValue(item) == 255) { // uninitialised/default sentinel
+		printf("%s", setupmenu[item].minStr);
+		return;
+	}
 	printf(setupmenu[item].formatstr, Setup_getValue(item));
 }
 
@@ -119,6 +123,12 @@ int Setup_snprintFormattedValue(char* buf, int n, int item) {
 		return snprintf(buf, n, ">> FACTORY RESET <<");
 	}
 	int curval = _getRawValue(item);
+	// A raw 255 is the uninitialised/default sentinel (e.g. the PID gain rows use
+	// it to mean "use built-in defaults"); show the row's label instead of the
+	// bogus 255*multiplier value.
+	if (curval == 255) {
+		return snprintf(buf, n, "%s", setupmenu[item].minStr);
+	}
 	int minval = setupmenu[item].minval;
 	int maxval = setupmenu[item].maxval;
 	if(curval==minval){

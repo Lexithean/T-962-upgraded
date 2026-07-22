@@ -927,6 +927,11 @@ static int32_t Main_Work(void) {
 					printf("\nReflow %s\n", "completed");
 					animIX=1;
 					Reflow_SetMode(REFLOW_STANDBY);
+					// Clear the stage-alert latches so the next reflow beeps
+					// through its stages again (they were only reset on a
+					// keypress abort, so a normal completion left them latched).
+					prev_setpoint = 0;
+					alerted_rising = alerted_peak = alerted_cooling = 0;
 				}
 			}
 
