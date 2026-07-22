@@ -984,3 +984,18 @@ int32_t Reflow_PIDTune_Work(uint8_t* pheat, uint8_t* pfan) {
 float Reflow_GetPeakTemp(void) { return reflow_peak_temp; }
 int Reflow_GetTAL(void) { return (int)reflow_tal_ticks / TICKS_PER_SECOND; }
 float Reflow_GetMaxRamp(void) { return reflow_max_ramp; }
+
+// Grade the finished run against the selected profile's own intent: did the
+// oven reach the profile's peak (within tolerance) without overshooting, and was
+// the fastest ramp within the recommended 3 C/s? Returns a short verdict for the
+// completion screen.
+#define GRADE_PEAK_TOL   (12.0f)  // C tolerance around the profile's peak setpoint
+#define GRADE_MAX_RAMP   (3.0f)   // C/s, widely-recommended maximum ramp rate
+const char* Reflow_GetGrade(void) {
+	uint16_t target = Reflow_GetProfilePeak();
+	if (target == 0) return ""; // no profile (e.g. bake): no grade
+	if (reflow_peak_temp < (float)target - GRADE_PEAK_TOL) return "PEAK LOW";
+	if (reflow_peak_temp > (float)target + GRADE_PEAK_TOL) return "PEAK HIGH";
+	if (reflow_max_ramp > GRADE_MAX_RAMP) return "RAMP FAST";
+	return "PROFILE MET";
+}

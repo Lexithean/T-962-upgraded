@@ -102,5 +102,6 @@ void Reflow_LoadPIDTuning(void);
 float Reflow_GetPeakTemp(void);
 int Reflow_GetTAL(void);
 float Reflow_GetMaxRamp(void);
+const char* Reflow_GetGrade(void); // Verdict vs the profile: "PROFILE MET", "PEAK LOW", ...
 
 #endif /* REFLOW_H_ */

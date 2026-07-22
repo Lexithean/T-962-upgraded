@@ -284,7 +284,16 @@ void displayReflowScreen(uint32_t keyspressed, uint8_t modeChange,uint8_t isDone
 			len = snprintf(buf, sizeof(buf), "Max Ramp: %1.1f C/s", Reflow_GetMaxRamp());
 			LCD_disp_str((uint8_t*)buf, len, 5, 32, FONT6X6);
 
-			len = snprintf(buf, sizeof(buf), "Press F4 for menu");
+			// Grade the run against the profile (only after a reflow, not a bake)
+			if (!Reflow_ThermalRunaway()) {
+				const char* grade = Reflow_GetGrade();
+				if (grade[0]) {
+					len = snprintf(buf, sizeof(buf), "Result: %s", grade);
+					LCD_disp_str((uint8_t*)buf, len, 5, 42, FONT6X6 | INVERT);
+				}
+			}
+
+			len = snprintf(buf, sizeof(buf), "Press S for menu");
 			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 54, FONT6X6);
 		}else{
 			LCD_BMPDisplay(stopbmp, 128 - 18, 0);
