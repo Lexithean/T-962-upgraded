@@ -21,6 +21,7 @@
 #include <stdio.h>
 #include "nvstorage.h"
 #include "reflow_profiles.h"
+#include "sensor.h"
 #include "setup.h"
 
 static setupMenuStruct setupmenu[] = {
@@ -79,6 +80,7 @@ void Setup_setValue(int item, int value) {
 	if (value > setupmenu[item].maxval) value = setupmenu[item].maxval;
 	NV_SetConfig(setupmenu[item].nvval, value);
 	Reflow_ValidateNV();
+	Sensor_ValidateNV(); // reload TC gain/offset cache so changes apply now, not next boot
 }
 
 void Setup_setRealValue(int item, float value) {

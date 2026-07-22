@@ -1561,6 +1561,10 @@ static int32_t Main_Work(void) {
 
 		showHeader("MAIN MENU");
 
+		// Clear the centred name row first: it redraws every frame, so a shorter
+		// name would otherwise leave the previous one's edges showing
+		// (e.g. "SAC305 LEADFREE" -> "SACCUSTOM #1REE").
+		LCD_disp_str((uint8_t*)"                     ", 21, 0, (8 * 6)+1, FONT6X6 | INVERT);
 		len = snprintf(buf, sizeof(buf), "%s", Reflow_GetProfileName());
 		LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), (8 * 6)+1, FONT6X6 | INVERT);
 
