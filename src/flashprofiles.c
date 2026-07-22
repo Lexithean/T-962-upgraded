@@ -161,7 +161,9 @@ static int rewrite_sector(int target_slot, const uint16_t* new_temps,
 
 	// Step 3: Write all cached profiles back
 	int new_count = 0;
-	int target_ok = 0;
+	// For a delete, success means the target slot is gone -- it is never written
+	// back, so seed target_ok=1 (otherwise Delete always reported failure).
+	int target_ok = deleting ? 1 : 0;
 	for (int i = 0; i < FLASH_PROFILE_MAX_SLOTS; i++) {
 		if (!cache_valid[i]) {
 			profile_valid[i] = 0;
@@ -268,10 +270,12 @@ void FlashProfiles_BackupAll(void) {
 	printf("\n# T-962 Profile Backup\n");
 	printf("# Paste this into serial after reflashing to restore.\n");
 
-	// EEPROM profiles (survive reflashing)
+	// EEPROM profiles (survive reflashing). Use the helper so the indices track
+	// the profile table size (CUSTOM#1/#2 are the last two entries); the old
+	// hardcoded 5/6 pointed at GC50/CUSTOM#1 after the table grew and never
+	// backed up CUSTOM#2 at all.
 	printf("# --- EEPROM profiles ---\n");
-	Reflow_ExportProfile(5);  // CUSTOM#1
-	Reflow_ExportProfile(6);  // CUSTOM#2
+	Reflow_ExportCustomProfiles();
 
 	// Flash profiles (erased on firmware update)
 	printf("# --- Flash profiles (lost on update) ---\n");

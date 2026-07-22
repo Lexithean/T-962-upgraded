@@ -142,9 +142,11 @@ static int flash_nth_valid(int n) {
 	return -1;
 }
 
-// Load a flash profile into the shadow buffer
+// Load a flash profile into the shadow buffer. Always reload (no
+// slot==flash_shadow_slot short-circuit): overwriting the currently-selected
+// flash slot must not leave the old temps in the shadow, or the oven would run
+// a curve that no longer exists in storage.
 static void load_flash_shadow(int slot) {
-	if (slot == flash_shadow_slot) return; // already loaded
 	if (FlashProfiles_Read(slot, flash_shadow.temperatures, flash_shadow_name) == 0) {
 		flash_shadow.name = flash_shadow_name;
 		flash_shadow_slot = slot;
@@ -416,6 +418,13 @@ void Reflow_ExportProfile(int profile) {
 	}
 	printf("\n");
 	profileidx = current;
+}
+
+// Export both editable CUSTOM profiles (the last two table entries) in
+// import-compatible form. Kept here because NUMPROFILES is file-local.
+void Reflow_ExportCustomProfiles(void) {
+	Reflow_ExportProfile(NUMPROFILES - 2); // CUSTOM#1
+	Reflow_ExportProfile(NUMPROFILES - 1); // CUSTOM#2
 }
 
 void Reflow_SetProfileName(int eeIdx, const char* name) {

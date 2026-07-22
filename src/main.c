@@ -169,8 +169,11 @@ int main(void) {
 	RTC_Init();
 	OneWire_Init();
 	SPI_TC_Init();
+	FlashProfiles_Init(); // Must run before Reflow_Init: Reflow_ValidateNV ->
+	                      // Reflow_SelectProfileIdx needs the flash profile count
+	                      // to validate a saved flash-profile index (else it is
+	                      // reset to 0 on every boot).
 	Reflow_Init();
-	FlashProfiles_Init();
 
 	SystemFan_Init();
 	printf("\nCurrent Operational Mode: "); Sensor_printOpMode(); printf("\n");
@@ -565,31 +568,42 @@ static int32_t Main_Work(void) {
 
 			} else if (strncmp(serial_cmd, "save flash ", 11) == 0) {
 				// save flash N t1,t2,...,Name
-				int fslot = serial_cmd[11] - '0';
-				if (serial_cmd[12] >= '0' && serial_cmd[12] <= '9') {
-					fslot = fslot * 10 + (serial_cmd[12] - '0');
-				}
-				if (fslot >= 0 && fslot < FLASH_PROFILE_MAX_SLOTS) {
-					char* tempStart = strchr(&serial_cmd[11], ' ');
-					if (tempStart) {
-						tempStart++;
+				char* p = &serial_cmd[11];
+				if (*p < '0' || *p > '9') {
+					printf("\nUsage: save flash N t1,t2,...,Name\n");
+				} else {
+					int fslot = 0;
+					while (*p >= '0' && *p <= '9') { fslot = fslot * 10 + (*p - '0'); p++; }
+					if (*p != ' ') {
+						printf("\nUsage: save flash N t1,t2,...,Name\n");
+					} else if (fslot >= FLASH_PROFILE_MAX_SLOTS) {
+						printf("\nSlot must be 0-%d\n", FLASH_PROFILE_MAX_SLOTS - 1);
+					} else {
+						p++; // skip the space
 						uint16_t ftemps[48] = {0};
 						char fname[FLASH_PROFILE_NAME_LEN] = {0};
 						int tidx = 0;
-						char* tok = tempStart;
-						while (tidx < 48 && *tok != '\0') {
-							if (*tok >= '0' && *tok <= '9') {
-								int val = 0;
-								while (*tok >= '0' && *tok <= '9') {
-									val = val * 10 + (*tok - '0');
-									tok++;
-								}
-								ftemps[tidx++] = (uint16_t)val;
-								if (*tok == ',') tok++;
-							} else {
-								strncpy(fname, tok, FLASH_PROFILE_NAME_LEN - 1);
-								break;
+						// Consume comma-separated fields. A field is a temperature
+						// only if it is entirely numeric; the first non-numeric
+						// field (or anything left after 48 temps) is the name. This
+						// keeps a trailing name even after a full 48-point list and
+						// treats a digit-leading name (e.g. "7seg") as a name.
+						while (*p != '\0' && tidx < 48) {
+							char* q = p;
+							int allnum = (*q != '\0' && *q != ',');
+							while (*q != '\0' && *q != ',') {
+								if (*q < '0' || *q > '9') allnum = 0;
+								q++;
 							}
+							if (!allnum) break;
+							int val = 0;
+							while (*p != '\0' && *p != ',') { val = val * 10 + (*p - '0'); p++; }
+							if (val > SETPOINT_MAX) val = SETPOINT_MAX;
+							ftemps[tidx++] = (uint16_t)val;
+							if (*p == ',') p++;
+						}
+						if (*p != '\0') {
+							strncpy(fname, p, FLASH_PROFILE_NAME_LEN - 1);
 						}
 						if (fname[0] == '\0') {
 							snprintf(fname, FLASH_PROFILE_NAME_LEN, "Flash #%d", fslot);
@@ -599,11 +613,7 @@ static int32_t Main_Work(void) {
 						} else {
 							printf("\n[ERROR] Flash write failed\n");
 						}
-					} else {
-						printf("\nUsage: save flash N t1,t2,...,Name\n");
 					}
-				} else {
-					printf("\nSlot must be 0-%d\n", FLASH_PROFILE_MAX_SLOTS - 1);
 				}
 
 			} else if (sscanf(serial_cmd, "delete flash %d", &param) > 0) {
