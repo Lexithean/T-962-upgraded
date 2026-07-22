@@ -37,3 +37,6 @@ upstream-wiki/
 fork-wiki/
 .DS_Store
 temp/
+
+# Host-side firmware simulator (local tooling, not part of the firmware)
+simulator/
