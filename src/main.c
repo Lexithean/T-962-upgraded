@@ -504,10 +504,14 @@ static int32_t Main_Work(void) {
 				printf("\nDumping profile %d: %s\n ", param, Reflow_GetProfileName());
 				Reflow_DumpProfile(param);
 
-			} else if (sscanf(serial_cmd, cmd_setting, &param, &paramF) > 0) {
-				Setup_setRealValue(param, paramF);
-				printf("\nAdjusted setting: ");
-				Setup_printFormattedValue(param);
+			} else if (sscanf(serial_cmd, cmd_setting, &param, &paramF) == 2) {
+				if (param < 0 || param >= Setup_getNumItems() - 1) {
+					printf("\nSetting id must be 0-%d\n", Setup_getNumItems() - 2);
+				} else {
+					Setup_setRealValue(param, paramF);
+					printf("\nAdjusted setting: ");
+					Setup_printFormattedValue(param);
+				}
 
 			} else if (strcmp(serial_cmd, "json") == 0) {
 				Reflow_SetJsonOutput(!Reflow_GetJsonOutput());

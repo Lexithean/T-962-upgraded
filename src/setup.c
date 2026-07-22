@@ -59,21 +59,25 @@ int Setup_isFactoryResetItem(int item) {
 }
 
 int _getRawValue(int item) {
+	if (item < 0 || item >= (int)NUM_SETUP_ITEMS) return 0;
 	return NV_GetConfig(setupmenu[item].nvval);
 }
 
 float Setup_getValue(int item) {
+	if (item < 0 || item >= (int)NUM_SETUP_ITEMS) return 0.0f;
 	int intval = _getRawValue(item);
 	intval += setupmenu[item].offset;
 	return ((float)intval) * setupmenu[item].multiplier;
 }
 
 void Setup_setValue(int item, int value) {
+	if (item < 0 || item >= (int)NUM_SETUP_ITEMS) return;
 	NV_SetConfig(setupmenu[item].nvval, value);
 	Reflow_ValidateNV();
 }
 
 void Setup_setRealValue(int item, float value) {
+	if (item < 0 || item >= (int)NUM_SETUP_ITEMS) return;
 	int intval = (int)(value / setupmenu[item].multiplier);
 	intval -= setupmenu[item].offset;
 	Setup_setValue(item, intval);
@@ -98,6 +102,10 @@ void Setup_decreaseValue(int item, int amount) {
 }
 
 void Setup_printFormattedValue(int item) {
+	if (item < 0 || item >= (int)NUM_SETUP_ITEMS) {
+		printf(">> FACTORY RESET <<");
+		return;
+	}
 	printf(setupmenu[item].formatstr, Setup_getValue(item));
 }
 
