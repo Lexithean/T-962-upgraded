@@ -239,8 +239,13 @@ void displayReflowScreen(uint32_t keyspressed, uint8_t modeChange,uint8_t isDone
 	}
 
 	if(modeChange){
-		// Work out total number of ticks (seconds) for profile
+		// Work out total number of ticks (seconds) for profile.
+		// Reset first: this static retained its value across runs, so a profile
+		// with no zero-terminator kept the previous length and *=10 grew it 10x
+		// every reflow until the int16 overflowed (and could reach 0 -> the
+		// division below would fault).
 		uint8_t n;
+		totalReflowTicks = 0;
 		for(n=0;n<NUMPROFILETEMPS-1;n++){
 			if(Reflow_GetSetpointAtIdx(n)==0 && Reflow_GetSetpointAtIdx(n+1)==0){
 				totalReflowTicks=n-1;
@@ -249,6 +254,9 @@ void displayReflowScreen(uint32_t keyspressed, uint8_t modeChange,uint8_t isDone
 		}
 		if(totalReflowTicks<=0){
 			totalReflowTicks=n;
+		}
+		if(totalReflowTicks<1){
+			totalReflowTicks=1; // guard the 52000/totalReflowTicks division
 		}
 		totalReflowTicks*=10;
 	}
@@ -358,5 +366,10 @@ uint8_t timeForScreensaver(){
 
 void initScreensaverTimeout(){
 	screensaverCnt=0;
-	screensaverTimeout=NV_GetConfig(SCREENSAVER_ACTIVE)*600;	// Outside range of floats, so can't use the Setup_getValue method
+	// SCREENSAVER_ACTIVE is 0-60 minutes; it is not reset by Reflow_ValidateNV,
+	// so a virgin NV byte reads 255 and 255*600 overflows the uint16 to a small
+	// bogus timeout. Treat uninitialised/out-of-range as disabled.
+	uint8_t mins = NV_GetConfig(SCREENSAVER_ACTIVE);
+	if (mins == 255 || mins > 60) mins = 0;
+	screensaverTimeout = (uint16_t)mins * 600;
 }

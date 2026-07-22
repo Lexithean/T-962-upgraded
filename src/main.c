@@ -116,6 +116,23 @@ static const char* temp_unit(void) {
 	return "C";
 }
 
+// Minimal signed-decimal parser, e.g. "1.5", "-0.25", "20". Used instead of
+// sscanf("%f") so the build does not link newlib's float-scanf support.
+static float parse_decimal(const char* s) {
+	while (*s == ' ') s++;
+	int neg = 0;
+	if (*s == '-') { neg = 1; s++; }
+	else if (*s == '+') { s++; }
+	float val = 0.0f;
+	while (*s >= '0' && *s <= '9') { val = val * 10.0f + (float)(*s - '0'); s++; }
+	if (*s == '.') {
+		s++;
+		float frac = 0.1f;
+		while (*s >= '0' && *s <= '9') { val += (float)(*s - '0') * frac; frac *= 0.1f; s++; }
+	}
+	return neg ? -val : val;
+}
+
 static int32_t Main_Work(void);
 
 
@@ -169,8 +186,11 @@ int main(void) {
 	RTC_Init();
 	OneWire_Init();
 	SPI_TC_Init();
+	FlashProfiles_Init(); // Must run before Reflow_Init: Reflow_ValidateNV ->
+	                      // Reflow_SelectProfileIdx needs the flash profile count
+	                      // to validate a saved flash-profile index (else it is
+	                      // reset to 0 on every boot).
 	Reflow_Init();
-	FlashProfiles_Init();
 
 	SystemFan_Init();
 	printf("\nCurrent Operational Mode: "); Sensor_printOpMode(); printf("\n");
@@ -320,7 +340,6 @@ static int32_t Main_Work(void) {
 	char* cmd_select_profile = "select profile %d";
 	char* cmd_bake = "bake %d %d";
 	char* cmd_dump_profile = "dump profile %d";
-	char* cmd_setting = "setting %d %f";
 	char* cmd_setOpMode = "set OpMode %d";
 	char* cmd_setOpModeThresh = "set OpThresh %d";
 	
@@ -331,7 +350,10 @@ static int32_t Main_Work(void) {
 			case SetEEProfileCmd:
 			{
 				EEProfileCMD EEcmd;
-				memcpy(&EEcmd, &advCmd.data, sizeof(advCmd.data));
+				// Copy only as many bytes as the destination holds. advCmd.data
+				// is 256 bytes; EEProfileCMD is 98. Copying sizeof(advCmd.data)
+				// smashed ~158 bytes of this stack frame with sender-controlled data.
+				memcpy(&EEcmd, &advCmd.data, sizeof(EEcmd));
 			
 				if (EEcmd.profileNum == 1 || EEcmd.profileNum == 2) {
 					printf("\nSetting EE profile %d:\n ", advCmd.data[0]);
@@ -340,8 +362,7 @@ static int32_t Main_Work(void) {
 						Reflow_SetSetpointAtIdx(i, EEcmd.tempData[i]);
 					}
 					Reflow_SaveEEProfile();
-					if (EEcmd.profileNum == 1) Reflow_DumpProfile(5); //CUSTOM#1
-					else Reflow_DumpProfile(6); //CUSTOM#2
+					Reflow_DumpProfile(Reflow_GetProfileIdx()); // the slot we just selected
 				}
 				else {
 					printf("\nOnly EEPROM profile 1 and 2 are supported for this command.\n");
@@ -358,7 +379,7 @@ static int32_t Main_Work(void) {
 				uart_rxflush();
 			}
 		}
-	} else if (uart_available() > 3) {
+	} else if (uart_hasline()) {
 		int len = uart_readline(serial_cmd, 255);
 
 		if (len > 0) {
@@ -473,7 +494,10 @@ static int32_t Main_Work(void) {
 				Reflow_SelectProfileIdx(param);
 				printf("\nSelected profile %d: %s\n", param, Reflow_GetProfileName());
 
-			} else if (sscanf(serial_cmd, cmd_bake, &param, &param1) > 0) {
+			} else if (strncmp(serial_cmd, "bake ", 5) == 0 &&
+			           (param1 = 0, sscanf(serial_cmd, cmd_bake, &param, &param1)) >= 1) {
+				// param1 is pre-zeroed, so a one-arg 'bake 150' can never read a
+				// stale stack value as the timer. param1 > 0 => timed bake.
 				if (param < SETPOINT_MIN) {
 					printf("\nSetpoint must be >= %ddegC\n", SETPOINT_MIN);
 					param = SETPOINT_MIN;
@@ -482,17 +506,16 @@ static int32_t Main_Work(void) {
 					printf("\nSetpont must be <= %ddegC\n", SETPOINT_MAX);
 					param = SETPOINT_MAX;
 				}
-				if (param1 < 1) {
-					printf("\nTimer must be greater than 0\n");
-					param1 = 1;
-				}
 
-				if (param1 < BAKE_TIMER_MAX) {
+				if (param1 > 0) {
+					if (param1 > BAKE_TIMER_MAX) param1 = BAKE_TIMER_MAX;
 					printf("\nStarting bake with setpoint %ddegC for %ds after reaching setpoint\n", param, param1);
 					timer = param1;
 					Reflow_SetBakeTimer(timer);
 				} else {
-					printf("\nStarting bake with setpoint %ddegC\n", param);
+					printf("\nStarting untimed bake with setpoint %ddegC\n", param);
+					timer = 0;
+					Reflow_SetBakeTimer(0);
 				}
 
 				setpoint = param;
@@ -504,10 +527,19 @@ static int32_t Main_Work(void) {
 				printf("\nDumping profile %d: %s\n ", param, Reflow_GetProfileName());
 				Reflow_DumpProfile(param);
 
-			} else if (sscanf(serial_cmd, cmd_setting, &param, &paramF) > 0) {
-				Setup_setRealValue(param, paramF);
-				printf("\nAdjusted setting: ");
-				Setup_printFormattedValue(param);
+			} else if (sscanf(serial_cmd, "setting %d", &param) == 1 && strchr(serial_cmd + 8, ' ')) {
+				// Value parsed by hand (parse_decimal) rather than sscanf %f, so
+				// the build does not pull in newlib's float-scanf (strtod/gethex),
+				// which alone is several KB of flash.
+				char* valstr = strchr(serial_cmd + 8, ' ') + 1;
+				paramF = parse_decimal(valstr);
+				if (param < 0 || param >= Setup_getNumItems() - 1) {
+					printf("\nSetting id must be 0-%d\n", Setup_getNumItems() - 2);
+				} else {
+					Setup_setRealValue(param, paramF);
+					printf("\nAdjusted setting: ");
+					Setup_printFormattedValue(param);
+				}
 
 			} else if (strcmp(serial_cmd, "json") == 0) {
 				Reflow_SetJsonOutput(!Reflow_GetJsonOutput());
@@ -539,7 +571,7 @@ static int32_t Main_Work(void) {
 					}
 					Reflow_SaveEEProfile();
 					printf("\nImported %d temperature points to CUSTOM#%d\n", idx, profNum);
-					Reflow_DumpProfile(profNum == 1 ? 5 : 6);
+					Reflow_DumpProfile(Reflow_GetProfileIdx()); // the slot we just selected
 				} else {
 					printf("\nOnly CUSTOM profile 1 or 2 supported (import profile 1 or 2)\n");
 				}
@@ -558,31 +590,42 @@ static int32_t Main_Work(void) {
 
 			} else if (strncmp(serial_cmd, "save flash ", 11) == 0) {
 				// save flash N t1,t2,...,Name
-				int fslot = serial_cmd[11] - '0';
-				if (serial_cmd[12] >= '0' && serial_cmd[12] <= '9') {
-					fslot = fslot * 10 + (serial_cmd[12] - '0');
-				}
-				if (fslot >= 0 && fslot < FLASH_PROFILE_MAX_SLOTS) {
-					char* tempStart = strchr(&serial_cmd[11], ' ');
-					if (tempStart) {
-						tempStart++;
+				char* p = &serial_cmd[11];
+				if (*p < '0' || *p > '9') {
+					printf("\nUsage: save flash N t1,t2,...,Name\n");
+				} else {
+					int fslot = 0;
+					while (*p >= '0' && *p <= '9') { fslot = fslot * 10 + (*p - '0'); p++; }
+					if (*p != ' ') {
+						printf("\nUsage: save flash N t1,t2,...,Name\n");
+					} else if (fslot >= FLASH_PROFILE_MAX_SLOTS) {
+						printf("\nSlot must be 0-%d\n", FLASH_PROFILE_MAX_SLOTS - 1);
+					} else {
+						p++; // skip the space
 						uint16_t ftemps[48] = {0};
 						char fname[FLASH_PROFILE_NAME_LEN] = {0};
 						int tidx = 0;
-						char* tok = tempStart;
-						while (tidx < 48 && *tok != '\0') {
-							if (*tok >= '0' && *tok <= '9') {
-								int val = 0;
-								while (*tok >= '0' && *tok <= '9') {
-									val = val * 10 + (*tok - '0');
-									tok++;
-								}
-								ftemps[tidx++] = (uint16_t)val;
-								if (*tok == ',') tok++;
-							} else {
-								strncpy(fname, tok, FLASH_PROFILE_NAME_LEN - 1);
-								break;
+						// Consume comma-separated fields. A field is a temperature
+						// only if it is entirely numeric; the first non-numeric
+						// field (or anything left after 48 temps) is the name. This
+						// keeps a trailing name even after a full 48-point list and
+						// treats a digit-leading name (e.g. "7seg") as a name.
+						while (*p != '\0' && tidx < 48) {
+							char* q = p;
+							int allnum = (*q != '\0' && *q != ',');
+							while (*q != '\0' && *q != ',') {
+								if (*q < '0' || *q > '9') allnum = 0;
+								q++;
 							}
+							if (!allnum) break;
+							int val = 0;
+							while (*p != '\0' && *p != ',') { val = val * 10 + (*p - '0'); p++; }
+							if (val > SETPOINT_MAX) val = SETPOINT_MAX;
+							ftemps[tidx++] = (uint16_t)val;
+							if (*p == ',') p++;
+						}
+						if (*p != '\0') {
+							strncpy(fname, p, FLASH_PROFILE_NAME_LEN - 1);
 						}
 						if (fname[0] == '\0') {
 							snprintf(fname, FLASH_PROFILE_NAME_LEN, "Flash #%d", fslot);
@@ -592,11 +635,7 @@ static int32_t Main_Work(void) {
 						} else {
 							printf("\n[ERROR] Flash write failed\n");
 						}
-					} else {
-						printf("\nUsage: save flash N t1,t2,...,Name\n");
 					}
-				} else {
-					printf("\nSlot must be 0-%d\n", FLASH_PROFILE_MAX_SLOTS - 1);
 				}
 
 			} else if (sscanf(serial_cmd, "delete flash %d", &param) > 0) {
@@ -617,9 +656,52 @@ static int32_t Main_Work(void) {
 			} else if (strcmp(serial_cmd, "backup") == 0) {
 				FlashProfiles_BackupAll();
 
+			} else if (strcmp(serial_cmd, "enter isp") == 0) {
+				// Programmatic entry into ISP (bootloader) mode for firmware update
+				// This uses IAP command 57 (Reinvoke ISP) to jump to ROM bootloader
+				printf("\n[ISP] Backing up flash profiles...\n");
+				FlashProfiles_BackupAll();
+				printf("\n[ISP] Shutting down heater and fan...\n");
+				Set_Heater(0);
+				Set_Fan(0);
+				printf("[ISP] Entering bootloader mode...\n");
+				printf("[ISP] Reconnect at 57600 baud to flash firmware.\n");
+				printf("[ISP] Power-cycle oven after flashing completes.\n");
+
+				// Brief delay for serial output to flush
+				for (volatile int i = 0; i < 2000000; i++);
+
+				// Extend watchdog timeout (cannot be disabled once enabled)
+				WDTC = 0xFFFFFFFF;
+
+				// Disable all interrupts and KEEP them disabled through the ISP
+				// jump. NXP requires interrupts off before Reinvoke ISP; a timer
+				// or UART interrupt during bootloader entry would vector into a
+				// stale user handler. Note: do NOT restore IRQs afterwards.
+				VIC_DisableIRQ();
+				VIC_DisableHandler(VIC_UART0);
+				VIC_DisableHandler(VIC_TIMER0);
+				WDFEED = 0xaa;
+				WDFEED = 0x55;
+
+				// Switch to legacy GPIO mode (bootloader requirement)
+				SCS = 0;
+				// Ensure heater (P0.9) and fan (P0.8) stay off during bootloader
+				IODIR0 = (1 << 8) | (1 << 9);
+				IOSET0 = (1 << 8) | (1 << 9);
+
+				// Enter ISP - this function never returns
+				{
+					static unsigned int isp_cmd[1];
+					static unsigned int isp_res[1];
+					isp_cmd[0] = IAP_REINVOKE_ISP;
+					((void (*)(unsigned int[], unsigned int[]))0x7ffffff1)(isp_cmd, isp_res);
+				}
+
 			} else if (strcmp(serial_cmd, "factory reset") == 0) {
 				NV_FactoryReset();
 				Reflow_ValidateNV();
+				Sensor_ValidateNV(); // reload TC gain/offset RAM cache too
 				Reflow_LoadCustomProfiles();
 				printf("\nReboot recommended.\n");
 
@@ -739,15 +821,13 @@ static int32_t Main_Work(void) {
 				// Factory reset from UI
 				NV_FactoryReset();
 				Reflow_ValidateNV();
+				Sensor_ValidateNV(); // reload TC gain/offset RAM cache too
 				Reflow_LoadCustomProfiles();
 				LCD_FB_Clear();
 				len = snprintf(buf, sizeof(buf), "FACTORY RESET OK");
 				LCD_disp_str((uint8_t*)buf, len, 13, 28, FONT6X6);
-				LCD_FB_Update();
+				LCD_FB_Update(); // show "FACTORY RESET OK" before returning home
 				Buzzer_Beep(BUZZ_1KHZ, 255, TICKS_MS(100));
-				// Brief pause so user sees the message
-				int wait = 20; // ~2 seconds at 100ms ticks
-				while (wait-- > 0) { retval = TICKS_MS(100); }
 				mode = MAIN_HOME;
 				Reflow_SetMode(REFLOW_STANDBY);
 				retval = 0;
@@ -778,41 +858,27 @@ static int32_t Main_Work(void) {
 	// About
 	} else if (mode == MAIN_ABOUT) {
 		if(modeChange){
+			// Clean, centred layout. The old screen drew the full-screen logo
+			// then overlaid right-aligned text on top of it, which rendered as
+			// a garbled overlap.
 			LCD_FB_Clear();
-			LCD_BMPDisplay(logobmp, 0, 0);
-			uint8_t n,i;
-
-			for(n=0;n<8;n++){
-				for(i=0;i<5;i++){
-					if( (i>1) || (n>0 && i>0) || (n>1 && i==0) )
-						LCD_disp_str((uint8_t*)" ", 1, (128-8*6)+(n*6), 26+(i*7), FONT6X6|INVERT);
-				}
-			}
-
-			for(n=0;n<22;n++){
-				LCD_disp_str((uint8_t*)" ", 1, n*6, 2, FONT6X6);
-				LCD_disp_str((uint8_t*)" ", 1, n*6, 64-10, FONT6X6);
-				LCD_disp_str((uint8_t*)" ", 1, n*6, 64-7, FONT6X6);
-			}
-
-			for(n=0;n<128;n++){
+			for(uint8_t n=0;n<128;n++){
 				LCD_SetPixel(n,7);
 				LCD_SetPixel(n,64-9);
 			}
-
-
 			len = snprintf(buf, sizeof(buf), "REFLOWOS");
-			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_RIGHT(len), 20, FONT6X6);
-			len = snprintf(buf, sizeof(buf), "BY SCHEMARA.COM");
-			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_RIGHT(len), 28, FONT6X6);
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 11, FONT6X6);
+			len = snprintf(buf, sizeof(buf), "by Schemara.com");
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 20, FONT6X6);
 			len = snprintf(buf, sizeof(buf), "VER %s", Version_GetGitVersion());
-			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_RIGHT(len), 36, FONT6X6);
-			len = snprintf(buf, sizeof(buf), "UNIFIED ENGINEERING");
-			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_RIGHT(len), 44, FONT6X6);
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 32, FONT6X6);
+			len = snprintf(buf, sizeof(buf), "Based on Unified");
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 41, FONT6X6);
+			len = snprintf(buf, sizeof(buf), "Engineering T-962");
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 49, FONT6X6);
 
-			LCD_disp_str((uint8_t*)"  ", 2, 128-12, 64-10, FONT6X6 | INVERT);
-			LCD_disp_str((uint8_t*)"S", 1, 128-9, 64-10, FONT6X6 | INVERT);
-
+			LCD_disp_str((uint8_t*)"  ", 2, 128-12, 64-7, FONT6X6 | INVERT);
+			LCD_disp_str((uint8_t*)"S", 1, 128-9, 64-7, FONT6X6 | INVERT);
 		}
 		retval = TICKS_MS(100);
 		showHeader("ABOUT");
@@ -845,7 +911,7 @@ static int32_t Main_Work(void) {
 			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 24, FONT6X6);
 			len = snprintf(buf, sizeof(buf), "HEATER OFF - FAN ON");
 			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 34, FONT6X6);
-			len = snprintf(buf, sizeof(buf), "TEMP: %.0f`", Sensor_GetTemp(TC_AVERAGE));
+			len = snprintf(buf, sizeof(buf), "TEMP: %.0f`%s", display_temp(Sensor_GetTemp(TC_AVERAGE)), temp_unit());
 			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 44, FONT6X6);
 
 			int y = 64 - 7;
@@ -871,6 +937,11 @@ static int32_t Main_Work(void) {
 					printf("\nReflow %s\n", "completed");
 					animIX=1;
 					Reflow_SetMode(REFLOW_STANDBY);
+					// Clear the stage-alert latches so the next reflow beeps
+					// through its stages again (they were only reset on a
+					// keypress abort, so a normal completion left them latched).
+					prev_setpoint = 0;
+					alerted_rising = alerted_peak = alerted_cooling = 0;
 				}
 			}
 
@@ -995,6 +1066,7 @@ static int32_t Main_Work(void) {
 		// timer ++
 		if (keyspressed & KEY_F4) {
 			timer += keyrepeataccel;
+			if (timer > BAKE_TIMER_MAX) timer = BAKE_TIMER_MAX;
 		}
 
 		int y = 10;
@@ -1010,7 +1082,7 @@ static int32_t Main_Work(void) {
 			LCD_disp_str((uint8_t*)"F2", 2, LCD_ALIGN_RIGHT(2), y, FONT6X6 | INVERT);
 			f2function = '+';
 		}
-		len = snprintf(buf, sizeof(buf), "%c SETPOINT %d`%s %c", f1function, (int)setpoint, temp_unit(), f2function);
+		len = snprintf(buf, sizeof(buf), "%c SETPOINT %d`%s %c", f1function, (int)(display_temp((float)setpoint) + 0.5f), temp_unit(), f2function);
 		LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), y, FONT6X6);
 
 
@@ -1468,7 +1540,7 @@ static int32_t Main_Work(void) {
 		}else{
 			drawSprites();
 
-			if (keyspressed & KEY_S) {
+			if (keyspressed & KEY_ANY) { // any key wakes the screensaver
 				retval=0;
 				mode=MAIN_HOME;
 			}
@@ -1499,10 +1571,14 @@ static int32_t Main_Work(void) {
 
 		showHeader("MAIN MENU");
 
+		// Clear the centred name row first: it redraws every frame, so a shorter
+		// name would otherwise leave the previous one's edges showing
+		// (e.g. "SAC305 LEADFREE" -> "SACCUSTOM #1REE").
+		LCD_disp_str((uint8_t*)"                     ", 21, 0, (8 * 6)+1, FONT6X6 | INVERT);
 		len = snprintf(buf, sizeof(buf), "%s", Reflow_GetProfileName());
 		LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), (8 * 6)+1, FONT6X6 | INVERT);
 
-		len = snprintf(buf,sizeof(buf), " OVEN TEMPERATURE %d` ", Reflow_GetActualTemp());
+		len = snprintf(buf,sizeof(buf), " OVEN TEMPERATURE %.0f`%s ", display_temp((float)Reflow_GetActualTemp()), temp_unit());
 		LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 64 - 6, FONT6X6);
 
 		// Make sure reflow complete beep is silenced when pressing any key

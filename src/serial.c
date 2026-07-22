@@ -90,11 +90,32 @@ uint8_t uart_chkAdvCmd(advancedSerialCMD* advCmd) {
 	return chkAdvCmd(&rxbuf, advCmd);
 }
 
+// True once a complete newline-terminated line is buffered. Lets the command
+// dispatcher process a line as soon as it is whole, regardless of length, so
+// short commands like "?" are handled instead of stalling behind a byte-count
+// gate (which also desynchronised the ring).
+int uart_hasline(void) {
+	unsigned int n = circ_buf_count(&rxbuf);
+	for (unsigned int i = 0; i < n; i++) {
+		if (circ_buf_peek(&rxbuf, i) == '\n') return 1;
+	}
+	// No newline yet. If the ring is full, the line is already longer than any
+	// command buffer and its newline was dropped on overflow, so it can never
+	// complete -- flush it, otherwise the full ring drops all future bytes and
+	// the console wedges permanently on one overlong/garbage line.
+	if (n >= CIRCBUFSIZE - 1) {
+		circ_buf_flush(&rxbuf);
+	}
+	return 0;
+}
+
 int uart_readline(char* buffer, int max_len) {
 	int i = 0;
-	while (uart_isrxready()) {
+	// Leave room for the terminating NUL: the last writable data index is
+	// max_len-2 so buffer[i]='\0' below can never write past buffer[max_len-1].
+	while (uart_isrxready() && i < max_len - 1) {
 		buffer[i] = uart_readc();
-		if (buffer[i] == '\n' || i >= max_len) {
+		if (buffer[i] == '\n') {
 			break;
 		}
 		i++;

@@ -21,15 +21,16 @@
 #include <stdio.h>
 #include "nvstorage.h"
 #include "reflow_profiles.h"
+#include "sensor.h"
 #include "setup.h"
 
 static setupMenuStruct setupmenu[] = {
 	{"Min fan speed    %4.0f",	REFLOW_MIN_FAN_SPEED,	 0, 254, 0, 1.0f, 		"Min fan speed     OFF","Min fan speed     MAX"},
 	{"Cycle done beep %4.1fs",	REFLOW_BEEP_DONE_LEN,	 0, 254, 0, 0.1f, 		"Cycle done beep   OFF","Cycle done beep   MAX"},
 	{"Left TC gain     %1.2f",	TC_LEFT_GAIN, 			10, 190, 0, 0.01f,		"Left TC gain     0.10","Left TC gain     1.90"},
-	{"Left TC offs.  %+1.2f",	TC_LEFT_OFFSET, 		 0, 254, -127, 0.10f,	"Left TC offs.  -12.70","Left TC offs.   12.70"},
+	{"Left TC offs.  %+1.2f",	TC_LEFT_OFFSET, 		 0, 254, -127, 0.50f,	"Left TC offs.  -63.50","Left TC offs.   63.50"},
 	{"Right TC gain    %1.2f",	TC_RIGHT_GAIN, 			10, 190, 0, 0.01f,		"Right TC gain    0.10","Right TC gain    1.90"},
-	{"Right TC offs. %+1.2f",	TC_RIGHT_OFFSET, 	 	 0, 254, -127, 0.10f,	"Right TC offs. -12.70","Right TC offs.  12.70"},
+	{"Right TC offs. %+1.2f",	TC_RIGHT_OFFSET, 	 	 0, 254, -127, 0.50f,	"Right TC offs. -63.50","Right TC offs.  63.50"},
 	{"Preheat temp   %4.0fC",	REFLOW_PREHEAT_TEMP,	 0, 50, 30, 1.0f,		"Preheat temp       30","Preheat temp       80"},
 	{"Bang-bang heat  %4.0f",	REFLOW_BANGBANG_MODE,	 0, 1, 0, 1.0f,		"Bang-bang heat    OFF","Bang-bang heat     ON"},
 	{"BB heat offset %3.0fC",	REFLOW_BB_HEAT_OFFSET,	 0, 25, 0, 1.0f,	"BB heat offset     0C","BB heat offset    25C"},
@@ -40,9 +41,9 @@ static setupMenuStruct setupmenu[] = {
 	{"Screensaver mins %4.0f",	SCREENSAVER_ACTIVE, 	 0, 60, 0, 1.0f,		"Screensaver       OFF","Screensaver    1 HOUR"},
 	{"Runaway thresh %3.0fC",	SAFETY_RUNAWAY_THRESH,	 0, 50, 0, 1.0f,		"Runaway prot.     OFF","Runaway thresh    50C"},
 	{"Buzzer alerts  %4.0f",	REFLOW_BUZZER_ALERTS,	 0, 1, 0, 1.0f,		"Buzzer alerts     OFF","Buzzer alerts      ON"},
-	{"Max cool rate %3.0f/s",	REFLOW_MAX_COOL_RATE,	 0, 50, 0, 0.1f,		"Max cool rate UNLIMIT","Max cool rate  5.0C/s"},
-	{"L TC hi-off %+1.2f",		TC_LEFT_OFFSET_HI, 	 0, 254, -127, 0.10f,	"L TC hi-off   -12.70","L TC hi-off    12.70"},
-	{"R TC hi-off %+1.2f",		TC_RIGHT_OFFSET_HI, 	 0, 254, -127, 0.10f,	"R TC hi-off   -12.70","R TC hi-off    12.70"},
+	{"Max cool rate %3.1f/s",	REFLOW_MAX_COOL_RATE,	 0, 50, 0, 0.1f,		"Max cool rate UNLIMIT","Max cool rate  5.0C/s"},
+	{"L TC hi-off %+1.2f",		TC_LEFT_OFFSET_HI, 	 0, 254, -127, 0.50f,	"L TC hi-off   -63.50","L TC hi-off    63.50"},
+	{"R TC hi-off %+1.2f",		TC_RIGHT_OFFSET_HI, 	 0, 254, -127, 0.50f,	"R TC hi-off   -63.50","R TC hi-off    63.50"},
 	{"Temp unit    %4.0f",		TEMP_UNIT_FAHRENHEIT,	 0, 1, 0, 1.0f,		"Temp unit       DEG C","Temp unit       DEG F"},
 	{"Fan kickstart %4.0f",		REFLOW_FAN_KICKSTART,	 0, 1, 0, 1.0f,		"Fan kickstart     OFF","Fan kickstart      ON"},
 };
@@ -59,21 +60,31 @@ int Setup_isFactoryResetItem(int item) {
 }
 
 int _getRawValue(int item) {
+	if (item < 0 || item >= (int)NUM_SETUP_ITEMS) return 0;
 	return NV_GetConfig(setupmenu[item].nvval);
 }
 
 float Setup_getValue(int item) {
+	if (item < 0 || item >= (int)NUM_SETUP_ITEMS) return 0.0f;
 	int intval = _getRawValue(item);
 	intval += setupmenu[item].offset;
 	return ((float)intval) * setupmenu[item].multiplier;
 }
 
 void Setup_setValue(int item, int value) {
+	if (item < 0 || item >= (int)NUM_SETUP_ITEMS) return;
+	// Clamp to the item's declared range. Centralising it here covers the serial
+	// 'setting' path and the factory-fresh case where a raw 255 NV byte gets
+	// decremented but stays above maxval (the menu decrement only clamped low).
+	if (value < setupmenu[item].minval) value = setupmenu[item].minval;
+	if (value > setupmenu[item].maxval) value = setupmenu[item].maxval;
 	NV_SetConfig(setupmenu[item].nvval, value);
 	Reflow_ValidateNV();
+	Sensor_ValidateNV(); // reload TC gain/offset cache so changes apply now, not next boot
 }
 
 void Setup_setRealValue(int item, float value) {
+	if (item < 0 || item >= (int)NUM_SETUP_ITEMS) return;
 	int intval = (int)(value / setupmenu[item].multiplier);
 	intval -= setupmenu[item].offset;
 	Setup_setValue(item, intval);
@@ -98,6 +109,14 @@ void Setup_decreaseValue(int item, int amount) {
 }
 
 void Setup_printFormattedValue(int item) {
+	if (item < 0 || item >= (int)NUM_SETUP_ITEMS) {
+		printf(">> FACTORY RESET <<");
+		return;
+	}
+	if (_getRawValue(item) == 255) { // uninitialised/default sentinel
+		printf("%s", setupmenu[item].minStr);
+		return;
+	}
 	printf(setupmenu[item].formatstr, Setup_getValue(item));
 }
 
@@ -106,6 +125,12 @@ int Setup_snprintFormattedValue(char* buf, int n, int item) {
 		return snprintf(buf, n, ">> FACTORY RESET <<");
 	}
 	int curval = _getRawValue(item);
+	// A raw 255 is the uninitialised/default sentinel (e.g. the PID gain rows use
+	// it to mean "use built-in defaults"); show the row's label instead of the
+	// bogus 255*multiplier value.
+	if (curval == 255) {
+		return snprintf(buf, n, "%s", setupmenu[item].minStr);
+	}
 	int minval = setupmenu[item].minval;
 	int maxval = setupmenu[item].maxval;
 	if(curval==minval){

@@ -1,152 +1,194 @@
 # T-962 ReflowOS
 
-**T-962 ReflowOS** is a maintained and improved fork of the [Unified Engineering T-962-improvements](https://github.com/UnifiedEngineering/T-962-improvements) firmware. This project is currently funded and maintained by **[Schemara.com](https://schemara.com)** (the AI-powered PCB & Schematic tools software by **Lexithean**). 
+A comprehensively improved, actively maintained firmware for the T-962, T-962A,
+and T-962C reflow ovens. ReflowOS turns the notoriously mediocre stock controller
+into a capable, safe, and scriptable reflow station. You get auto-tuning,
+thermocouple calibration, room for 40+ stored profiles, a full serial API, and
+several layers of safety protection.
 
-> **T-962C users:** See the [T-962C Guide](https://github.com/Lexithean/T-962_ReflowOS/wiki/T-962C-Guide) in the wiki for specific firmware settings and hardware fixes.
+It is a maintained fork of [UnifiedEngineering/T-962-improvements](https://github.com/UnifiedEngineering/T-962-improvements),
+funded and maintained by [Schemara.com](https://schemara.com), the AI-powered PCB
+and schematic tools by Lexithean.
 
-> ⚠️ **Compatibility:** This firmware requires a T-962 with the **NXP LPC2134** MCU. Some 2024+ models (V2.0 board) use a different processor and are **not compatible**. [Check your board](https://github.com/Lexithean/T-962_ReflowOS/wiki/Troubleshooting) before flashing.
+<p align="center">
+  <img src="docs/images/01-main-menu.png" width="330" alt="Main menu">
+  <img src="docs/images/12-reflow-ramp.png" width="330" alt="Reflow in progress">
+</p>
+<p align="center">
+  <img src="docs/images/14-reflow-complete.png" width="330" alt="Post-reflow analytics">
+  <img src="docs/images/15-thermal-runaway.png" width="330" alt="Thermal runaway protection">
+</p>
 
-## Features (vs upstream)
-
-This fork merges the following improvements from upstream pull requests that were never merged into the original repo:
-
-### Thermocouple & Calibration
-- **Finer TC offset steps** — 0.10°C instead of 0.25°C for more precise calibration (#235)
-- **MAX31855 calibration** — TC gain/offset settings now apply to external thermocouple boards (#241)
-- **Wider TC offset range** — ±12.7°C offset range (was ±25°C with coarser steps) (#245)
-
-### Operational Modes
-- **SPLIT mode** — Uses ambient TC control until a configurable threshold, then switches to PCB-surface thermocouple control for accurate reflow tracking (#136)
-- **MAXTEMPOVERRIDE mode** — Any TC reading above a threshold overrides the average, useful for sensitive components (#136)
-- **Bang-bang heater control** — ON/OFF heater drive instead of PID, dramatically improves T-962C heating (fork addition)
-- **Preheat phase** — Configurable preheat temperature before profile clock starts (fork addition)
-
-### Auto-Calibration
-- **Bang-bang auto-tune** — Runs 3 heat/cool cycles to measure thermal overshoot/undershoot, stores anticipatory offsets with live temperature graph (fork addition)
-- **PID auto-tune** — Ziegler-Nichols relay method, measures oscillation period/amplitude over 3 cycles to compute optimal Kp/Ki/Kd with live graph (fork addition)
-- **TC offset auto-calibration** — Uses cold junction sensor as reference at ambient temperature to auto-zero both thermocouples (fork addition)
-- **Two-point TC calibration** — Separate ambient and high-temp (200°C) offsets per TC, linear interpolation across temperature range for improved accuracy (fork addition)
-- All calibration modes accessible from setup menu or via serial commands (`bbtune`, `pidtune`, `tccal`)
-
-### Safety & Control
-- **Thermal runaway protection** — Aborts reflow/bake if temperature exceeds setpoint by a configurable threshold (0–50°C), with alarm buzzer and error screen (fork addition)
-- **Heater failure detection** — Serial warning if temperature doesn't rise 5°C in 30s of full heat output (broken SSR/element detection) (fork addition)
-- **Cooling rate control** — Limits fan speed to prevent thermal shock when cooling rate exceeds a configurable max (0–5.0°C/s) (fork addition)
-- **Audible stage alerts** — Distinct buzzer melodies for success and safety alarms (fork addition)
-- **Time remaining** — Countdown timer shown on reflow graph display (fork addition)
-- **Post-Reflow Analytics** — Displays Peak Temp, TAL (>217°C), and Max Ramp Rate upon completion (fork addition)
-- **Fan Kickstart** — Optional 250ms full-power pulse on startup to prevent low-speed fan stall (fork addition)
-- **Cold start detection** — Logs starting temperature and cold/warm status at reflow/bake start (fork addition)
-
-### UI Improvements
-- **°C/°F temperature toggle** — Display temperatures in Celsius or Fahrenheit via settings menu (fork addition)
-- **Improved About screen** with version info and credits (#159)
-- **Screensaver** with configurable timeout (#159)
-- **Setup menu min/max labels** — Shows human-readable limits at range boundaries (#159)
-- **Shorter TC labels** — Prevents LCD buffer overflow on long offset values (#155)
-
-### Stability & Compatibility
-- **LCD buffer overflow fix** — Prevents crashes from long strings (#245)
-- **1-wire temperature sensor support** — DS18B20, DS18S20, and DS1822 all supported for cold junction compensation (#148)
-- **Binary serial command interface** — CRC-validated protocol for uploading custom profiles via UART (#136)
-- **Serial calibration commands** — `bbtune`, `pidtune`, `tccal` for headless auto-calibration via UART (fork addition)
-- **Serial JSON output** — `json` command toggles machine-readable JSON output for PC graphing/logging tools (fork addition)
-- **Text-based profile import** — `import profile N t1,t2,...` for easy profile upload without binary protocol (fork addition)
-- **Profile export** — `export profile N` outputs in import-compatible format for round-trip editing (fork addition)
-- **Profile naming** — `name profile N <name>` renames CUSTOM profile slots (fork addition)
-- **Flash Profile Storage** — Up to 32 additional reflow profiles stored in MCU flash (sector 10) via IAP. Serial commands: `save flash`, `delete flash`, `list flash` (fork addition)
-- **Profile Backup & Restore** — `backup` command dumps all profiles (EEPROM + flash) as restorable serial text to prevent data loss during firmware updates (fork addition)
-- **Enhanced Safety Logic (v2.2)** — 'SAFETY ABORT' UI feedback and state reset improvements (fork addition)
-- **PlatformIO support** — Build with `pio run` in addition to `make` (#207)
-
-### Build & CI
-- **GitHub Actions CI/CD** — Automatic firmware builds on push/PR, release artifact upload
-- **Node.js 24 compatible** — Updated action versions for long-term support
+> ⚠️ **Compatibility.** This firmware requires a T-962 with the NXP LPC2134 MCU.
+> Some 2024+ models (the V2.0 board) use a different processor and will not work.
+> [Check your board](https://github.com/Lexithean/T-962_ReflowOS/wiki/Troubleshooting)
+> before you flash.
+>
+> **T-962C users:** turn on bang-bang heater control. The
+> [Calibration guide](docs/CALIBRATION.md#control-modes-pid-vs-bang-bang) explains why.
 
 ---
 
-## Serial Commands
+## Documentation
 
-The serial interface (115200 baud) allows full control and configuration.
-
-> [!TIP]
-> Use the `backup` command before updating firmware to export your EEPROM profiles as restorable text.
-
-| Command | Description |
-|---------|-------------|
-| `help` | Show all available commands |
-| `backup` | Dump all EEPROM profiles as restorable text |
-| `export profile <ID>` | Export any profile in import format |
-| `import profile <1|2> <Data>` | Import into CUSTOM#1 or CUSTOM#2 EEPROM |
-| `name profile <1|2> <Name>` | Rename CUSTOM#1 or CUSTOM#2 EEPROM |
-| `bake <Temp> [Time]` | Enter bake mode at <Temp> C for [Time] s |
-| `json` | Toggle JSON telemetry output |
-| `pidtune` / `bbtune` | Start automated heater tuning |
-| `tccal` | Start automated thermocouple calibration |
+| Guide | What's inside |
+|-------|---------------|
+| 📖 **[User Guide](docs/USER_GUIDE.md)** | Every on-oven screen and key, with screenshots. Running a reflow, baking, editing profiles. |
+| 🌡️ **[Reflow Profiles](docs/PROFILES.md)** | Built-in, CUSTOM (EEPROM), and 32 flash profiles. Editing, import/export, backup. |
+| 🎯 **[Calibration & Tuning](docs/CALIBRATION.md)** | Thermocouple auto-cal, two-point cal, bang-bang and PID auto-tune, operational modes. |
+| ⚙️ **[Settings Reference](docs/SETTINGS.md)** | Every setting, its range, default, and effect. |
+| 🔌 **[Serial Reference](docs/SERIAL.md)** | The full command set, CSV/JSON telemetry, headless control. |
+| 🛡️ **[Safety Features](docs/SAFETY.md)** | Runaway protection, absolute cutoff, heater-failure detection, watchdog. |
+| 🔧 **[Building & Flashing](docs/BUILDING.md)** | Toolchains, flashing the oven, first boot, safe updates. |
+| 🩺 **[Troubleshooting, FAQ & Glossary](docs/TROUBLESHOOTING.md)** | Common problems and fixes, frequently asked questions, and a terms glossary. |
 
 ---
 
-## Hardware Improvements
+## Highlights
 
-Here are a few improvements made to the T-962 reflow oven utilizing the _existing_ controller hardware:
+### 🎯 Auto-calibration and tuning
+Run `tccal` to zero both thermocouples against the cold-junction reference at
+room temperature. For accuracy across the whole range, set a separate offset at
+ambient and at 200 °C per thermocouple, and the firmware interpolates between
+them. Bang-bang auto-tune measures overshoot and undershoot over three cycles and
+stores the anticipatory offsets it finds, all with a live graph. PID auto-tune
+uses the Ziegler-Nichols relay method to compute Kp, Ki, and Kd for you. Every
+one of these runs from the front panel or over serial.
 
-#### Replace masking tape
-Instructable suggesting [replacing masking tape with kapton tape](http://www.instructables.com/id/T962A-SMD-Reflow-Oven-FixHack/?ALLSTEPS).
+### 🌡️ Profiles
+Six built-in paste profiles cover SAC305, AMTECH SynTECH-LF, NC-31 low-temp, 63/37
+leaded, and Loctite GC10/GC50. Two CUSTOM profiles live in EEPROM and are editable
+on the oven or over serial. Up to 32 more profiles fit in flash, so you can keep a
+whole paste library and pick any of them from the front panel. The `backup`
+command dumps everything as pasteable serial text.
 
-#### Cold junction compensation
-The factory firmware assumes a 20°C cold-junction at all times. Add a 1-wire temperature sensor to the TC terminal block for proper compensation. Compatible sensors: **DS18B20** (recommended), **DS18S20**, or **DS1822**. See the [wiki](https://github.com/Lexithean/T-962_ReflowOS/wiki) for installation instructions and the [Troubleshooting](https://github.com/Lexithean/T-962_ReflowOS/wiki/Troubleshooting) page for wiring details.
+### 🛡️ Safety
+Thermal runaway protection aborts the run if the temperature climbs past your
+threshold above setpoint. On top of that, an absolute 280 °C cutoff fires even
+when the setpoint is corrupt, and it cannot be switched off. There is also
+heater-failure detection, cooling-rate limiting, and a hardware watchdog.
 
-#### Check mains earth connection
-Make sure the protective earth wire makes contact with the back panel and that both halves of the oven chassis are connected.
+### 🔧 Control
+Bang-bang heater mode dramatically improves the poorly behaved T-962C heater. A
+configurable preheat phase soaks the oven before the profile clock starts, and it
+never skips the profile's own opening ramp. Choose PID or bang-bang, each with its
+own auto-tune. Operational modes (AMBIENT, MAXTEMPOVERRIDE, SPLIT) support
+multi-probe setups.
 
-#### System fan PWM control
-The system fan can be speed-controlled via the spare `ADO` test point. See [wiki: system fan PWM mod](https://github.com/Lexithean/T-962_ReflowOS/wiki/System-fan-control).
+### 📊 Monitoring and UI
+The live reflow graph shows the target curve, your temperature trace, and both
+elapsed and remaining time. When a run finishes you get analytics: peak
+temperature, time above liquidus, and the fastest ramp rate. A °C/°F toggle
+applies consistently on every screen. Rounding out the UI are stage-transition
+buzzer alerts, a fan kickstart pulse, cold-start logging, and a screensaver.
+
+### 🔌 Serial and tooling
+The text console (115200 8N1) exposes everything: reflow, bake, profiles,
+settings, and calibration, all scriptable. Telemetry streams as CSV or JSON at
+about 4 Hz for logging and graphing. A binary upload protocol and a text-based
+`import` command make it easy to move profiles around.
+
+The [documentation table](#documentation) above covers each of these in detail.
+
+---
+
+## Quick start
+
+1. Flash the firmware with [`pio run -t upload`](docs/BUILDING.md), or hold F1 at
+   power-on to enter ISP mode.
+2. Fit a cold-junction sensor, then run [`tccal`](docs/CALIBRATION.md#thermocouple-offset-auto-calibration)
+   to calibrate.
+3. Pick [PID or bang-bang](docs/CALIBRATION.md#control-modes-pid-vs-bang-bang)
+   (bang-bang for the T-962C) and run the matching auto-tune.
+4. Select the profile that matches your solder paste (F4 on the oven).
+5. Press **S**, watch the [live graph](docs/USER_GUIDE.md#running-a-reflow), and
+   read the [analytics](docs/USER_GUIDE.md#peak-and-completion) at the end.
+
+New here? Start with the [User Guide](docs/USER_GUIDE.md).
+
+---
+
+## Serial at a glance
+
+Connect any terminal at 115200 baud, 8N1, and type `help`. A few essentials:
+
+```
+list profiles          # see all profiles and ids
+select profile 0       # pick SAC305
+reflow                 # start a reflow
+bake 120 600           # bake at 120 C for 600 s
+stop                   # abort
+tccal                  # calibrate thermocouples
+backup                 # dump all profiles before a firmware update
+json                   # toggle machine-readable telemetry
+```
+
+The full command set, telemetry formats, and examples are in the
+[Serial Reference](docs/SERIAL.md).
 
 ---
 
 ## Building
 
-### Make (gcc-arm-none-eabi)
-See `COMPILING.md` for toolchain setup.
-
-### PlatformIO
 ```bash
-pio run
+pio run                # build (PlatformIO pulls the ARM toolchain)
+pio run -t upload      # build and flash
 ```
 
-The MCU is an LPC2134/01 (128kB flash / 16kB RAM, 55.296MHz). See the [Wiki] for flashing instructions.
+You can also use `make` with `gcc-arm-none-eabi`. Full instructions, flashing, and
+safe-update steps are in [Building & Flashing](docs/BUILDING.md).
 
 ---
 
-## ⚠️ Disclaimer & Support
-**Use at your own risk.** This firmware is provided "as is" without any warranty. Schemara.com and Lexithean assume **no liability** for any issues, damage to property, or equipment failure resulting from the use of this software. 
+## Hardware improvements worth doing
 
-- **No Professional Support:** We do not offer professional or commercial support for this firmware. If you are interested in commercial/professional support please email us at [support@lexithean.com](mailto:support@lexithean.com).
-- **Community Help:** While we cannot take liability, we are happy to help via [GitHub Issues](https://github.com/Lexithean/T-962_ReflowOS/issues) in any way we can.
+These all use the controller hardware you already have:
+
+- **Add a cold-junction sensor.** Fit a DS18B20 (or DS18S20/DS1822) to the TC
+  terminal block. The stock firmware otherwise assumes a fixed ambient, and
+  without one you cannot run `tccal`.
+- **Replace the masking tape** with Kapton tape ([instructable](http://www.instructables.com/id/T962A-SMD-Reflow-Oven-FixHack/?ALLSTEPS)).
+- **Check the mains earth.** Confirm the protective earth contacts the chassis and
+  that both halves are bonded.
+- **Add system-fan PWM.** Speed-control the system fan through the spare `ADO` test
+  point ([wiki](https://github.com/Lexithean/T-962_ReflowOS/wiki/System-fan-control)).
+
+There is more in the [project wiki](https://github.com/Lexithean/T-962_ReflowOS/wiki).
 
 ---
 
-## Contributing
+## ⚠️ Disclaimer and support
 
-This firmware runs on T-962, T-962A, and T-962C ovens. Success/failure reports are welcome! Released under GPLv3.
+Use at your own risk. This firmware controls a high-power heater and is provided
+"as is" without any warranty. Schemara.com and Lexithean assume no liability for
+injury, fire, property damage, or equipment failure. Read the
+[Safety guide](docs/SAFETY.md), never leave a running oven unattended, and keep an
+extinguisher nearby.
+
+- Commercial support: [support@lexithean.com](mailto:support@lexithean.com)
+- Community help: [GitHub Issues](https://github.com/Lexithean/T-962_ReflowOS/issues)
+
+Runs on the T-962, T-962A, and T-962C. Success and failure reports are both
+welcome. Released under GPLv3.
+
+---
 
 ## Acknowledgements
-- [Unified Engineering](https://github.com/UnifiedEngineering/T-962-improvements) — original improved firmware
-- [ImNoahDev](https://github.com/ImNoahDev) — T-962C bang-bang heater control, preheat phase, fork maintenance
-- [KLEYNOD](https://github.com/UnifiedEngineering/T-962-improvements/issues/267) — bang-bang heating concept, delta rewiring research
-- [Smashcat](https://github.com/Smashcat) — UI improvements, screensaver ([#159](https://github.com/UnifiedEngineering/T-962-improvements/pull/159))
-- [radensb](https://github.com/radensb) — SPLIT/MAXTEMPOVERRIDE modes, binary command interface ([#136](https://github.com/UnifiedEngineering/T-962-improvements/pull/136))
-- [ardiehl](https://github.com/ardiehl) — DS18S20 sensor support ([#148](https://github.com/UnifiedEngineering/T-962-improvements/pull/148))
-- [maxgerhardt](https://github.com/maxgerhardt) — PlatformIO support ([#207](https://github.com/UnifiedEngineering/T-962-improvements/pull/207))
-- [mcapdeville](https://github.com/mcapdeville) — LCD buffer overflow fix ([#245](https://github.com/UnifiedEngineering/T-962-improvements/pull/245))
-- [georgeharker](https://github.com/georgeharker) — MAX31855 calibration ([#241](https://github.com/UnifiedEngineering/T-962-improvements/pull/241))
-- [CoryCharlton](https://github.com/CoryCharlton) — finer TC offset steps ([#235](https://github.com/UnifiedEngineering/T-962-improvements/pull/235))
-- [nica-f](https://github.com/nica-f) — LCD text printing fixes ([#155](https://github.com/UnifiedEngineering/T-962-improvements/pull/155))
-- [cinderblock](https://github.com/cinderblock) — URL typo fix ([#252](https://github.com/UnifiedEngineering/T-962-improvements/pull/252))
-- [C PID Library - Version 1.0.1, GPLv3]
+
+Built on years of community work:
+
+- [Unified Engineering](https://github.com/UnifiedEngineering/T-962-improvements) for the original improved firmware this fork is based on
+- [ImNoahDev](https://github.com/ImNoahDev) for T-962C bang-bang control, preheat, auto-tune, analytics, flash storage, and fork maintenance
+- [KLEYNOD](https://github.com/UnifiedEngineering/T-962-improvements/issues/267) for the bang-bang heating concept and delta-rewiring research
+- [Smashcat](https://github.com/Smashcat) for UI improvements and the screensaver ([#159](https://github.com/UnifiedEngineering/T-962-improvements/pull/159))
+- [radensb](https://github.com/radensb) for the SPLIT/MAXTEMPOVERRIDE modes and the binary command interface ([#136](https://github.com/UnifiedEngineering/T-962-improvements/pull/136))
+- [ardiehl](https://github.com/ardiehl) for DS18S20/DS1822 sensor support ([#148](https://github.com/UnifiedEngineering/T-962-improvements/pull/148))
+- [maxgerhardt](https://github.com/maxgerhardt) for PlatformIO support ([#207](https://github.com/UnifiedEngineering/T-962-improvements/pull/207))
+- [mcapdeville](https://github.com/mcapdeville) for the LCD buffer-overflow fix ([#245](https://github.com/UnifiedEngineering/T-962-improvements/pull/245))
+- [georgeharker](https://github.com/georgeharker) for MAX31855 calibration ([#241](https://github.com/UnifiedEngineering/T-962-improvements/pull/241))
+- [CoryCharlton](https://github.com/CoryCharlton) for finer TC offset steps ([#235](https://github.com/UnifiedEngineering/T-962-improvements/pull/235))
+- [nica-f](https://github.com/nica-f) for LCD text-printing fixes ([#155](https://github.com/UnifiedEngineering/T-962-improvements/pull/155))
+- [cinderblock](https://github.com/cinderblock) for a URL fix ([#252](https://github.com/UnifiedEngineering/T-962-improvements/pull/252))
+- The [C PID Library](https://github.com/mblythe86/C-PID-Library), v1.0.1, GPLv3
 
 [wiki]: https://github.com/Lexithean/T-962_ReflowOS/wiki
-[Flashing firmware]: https://github.com/Lexithean/T-962_ReflowOS/wiki/Flashing-the-LPC21xx-controller
-[DS18B20]: http://datasheets.maximintegrated.com/en/ds/DS18B20.pdf
-[hackaday post]: http://hackaday.com/2014/11/27/improving-the-t-962-reflow-oven/
-[C PID Library - Version 1.0.1, GPLv3]: https://github.com/mblythe86/C-PID-Library

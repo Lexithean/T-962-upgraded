@@ -13,6 +13,10 @@ typedef enum eReflowMode {
 #define SETPOINT_MIN (30)
 #define SETPOINT_MAX (300)
 #define SETPOINT_DEFAULT (30)
+// Absolute measured-temperature ceiling. Above any legitimate reflow peak
+// (~250C) but a hard backstop against a stuck/garbage setpoint. Independent of
+// the user-configurable setpoint-relative runaway threshold.
+#define REFLOW_ABS_TEMP_LIMIT (280)
 #define TOTAL_DOTS	110
 
 #define BBTUNE_TARGET_HIGH (200)

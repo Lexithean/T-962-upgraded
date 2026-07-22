@@ -36,3 +36,9 @@ lpc21isp
 upstream-wiki/
 fork-wiki/
 .DS_Store
+temp/
+
+# Host-side firmware simulator (local tooling, not part of the firmware)
+simulator/
+# Generated at build time by create_version.py
+src/version.c

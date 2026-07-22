@@ -49,7 +49,9 @@ static float avgtemp;
 
 static uint8_t reflowdone = 0;
 static ReflowMode_t mymode = REFLOW_STANDBY;
-static uint16_t numticks = 0;
+// uint32: a 36h bake is 518400 ticks at 4Hz, far beyond a uint16's 65535
+// (~4h33m) after which the numticks >= bake_timer test could never fire.
+static uint32_t numticks = 0;
 
 static int standby_logging = 0;
 
@@ -62,6 +64,11 @@ static int reflowPaused=0;
 
 // Safety: thermal runaway
 static uint8_t runaway_detected = 0;
+// The relative runaway check only arms once the setpoint has caught up to (met
+// or exceeded) the measured temperature. This avoids a false trip when a reflow
+// starts with the oven already hot (warm back-to-back boards, or a high preheat)
+// while the profile's opening setpoint is low. The absolute cutoff is unaffected.
+static uint8_t runaway_armed = 0;
 static float prev_avgtemp = 0;
 
 // Heater failure detection
@@ -89,6 +96,7 @@ static int32_t Reflow_Work(void) {
 	avgtemp = Sensor_GetTemp(TC_AVERAGE);
 
 	const char* modestr = "UNKNOWN";
+	uint8_t in_preheat = 0;
 
 	// Depending on mode we should run this with different parameters
 	if (mymode == REFLOW_STANDBY || mymode == REFLOW_STANDBYFAN) {
@@ -113,7 +121,12 @@ static int32_t Reflow_Work(void) {
 			// Preheat phase: heat to user-configured temp before starting the profile
 			Reflow_Run(0, avgtemp, &heat, &fan, preheat_temp);
 			modestr = "PREHEAT";
-			// Don't increment ticks - profile timer hasn't started
+			in_preheat = 1;
+			// Hold the profile clock at zero: the RTC that indexes the profile
+			// keeps running during preheat, so without this the profile would
+			// start at index = preheat_duration/10, skipping the initial ramp.
+			RTC_Zero();
+			ticks = 0;
 		} else {
 			uint8_t done_now = Reflow_Run(ticks, avgtemp, &heat, &fan, 0) ? 1 : 0;
 			if (done_now && !reflowdone) {
@@ -159,12 +172,27 @@ static int32_t Reflow_Work(void) {
 		}
 	}
 
-	// Thermal runaway detection: abort if temp exceeds setpoint + threshold
-	if ((mymode == REFLOW_REFLOW || mymode == REFLOW_BAKE) && intsetpoint > 0) {
+	// Thermal runaway detection: abort if temp exceeds setpoint + threshold, OR
+	// if it exceeds an absolute ceiling regardless of setpoint. The absolute
+	// cutoff is a backstop: it still fires when the setpoint-relative check is
+	// defeated by a bad (e.g. corrupt/uninitialised) setpoint.
+	if (mymode == REFLOW_REFLOW || mymode == REFLOW_BAKE) {
 		uint8_t thresh = NV_GetConfig(SAFETY_RUNAWAY_THRESH);
-		if (thresh > 0 && thresh < 255 && avgtemp > (float)(intsetpoint + thresh)) {
-			printf("\n*** THERMAL RUNAWAY: %.1fC > %d+%dC setpoint! ***",
-			       avgtemp, intsetpoint, thresh);
+		// Arm the relative check once the setpoint has met/passed the measured
+		// temperature (the oven is at or below where the profile wants it). Don't
+		// arm during preheat: its high setpoint would arm the check, then the drop
+		// to the profile's low opening setpoint would false-trip at the handoff.
+		if (!runaway_armed && !in_preheat && intsetpoint > 0 && avgtemp <= (float)intsetpoint) {
+			runaway_armed = 1;
+		}
+		uint8_t relative_trip = (runaway_armed && !in_preheat &&
+		                         intsetpoint > 0 && intsetpoint <= SETPOINT_MAX &&
+		                         thresh > 0 && thresh < 255 &&
+		                         avgtemp > (float)(intsetpoint + thresh));
+		uint8_t absolute_trip = (avgtemp > (float)REFLOW_ABS_TEMP_LIMIT);
+		if (relative_trip || absolute_trip) {
+			printf("\n*** THERMAL RUNAWAY: %.1fC (setpoint %d, %s trip) ***",
+			       avgtemp, intsetpoint, absolute_trip ? "absolute" : "relative");
 			runaway_detected = 1;
 			reflowdone = 1;
 			Buzzer_PlayAlarm();
@@ -234,6 +262,7 @@ static int32_t Reflow_Work(void) {
 			reflow_ramp_calc_temp = 0;
 			reflowdone = 0;
 			runaway_detected = 0;
+			runaway_armed = 0;
 		}
 	} else if (mymode == REFLOW_BAKE) {
 		if (bake_timer > 0 && numticks >= bake_timer) {
@@ -381,10 +410,6 @@ void Reflow_SetSetpoint(uint16_t thesetpoint) {
 void Reflow_LoadSetpoint(void) {
 	intsetpoint = NV_GetConfig(REFLOW_BAKE_SETPOINT_H) << 8;
 	intsetpoint |= NV_GetConfig(REFLOW_BAKE_SETPOINT_L);
-
-	printf("\n bake setpoint values: %x, %x, %d\n",
-		NV_GetConfig(REFLOW_BAKE_SETPOINT_H),
-		NV_GetConfig(REFLOW_BAKE_SETPOINT_L), intsetpoint);
 }
 
 int16_t Reflow_GetActualTemp(void) {
@@ -400,8 +425,9 @@ uint16_t Reflow_GetSetpoint(void) {
 }
 
 void Reflow_SetBakeTimer(int seconds) {
-	// reset ticks to 0 when adjusting timer.
-	numticks = 0;
+	// Do NOT reset numticks here. A fresh bake already resets it on the
+	// STANDBY->BAKE mode change; zeroing it on every timer adjustment restarted
+	// the elapsed count each time the operator nudged the timer mid-bake.
 	bake_timer = seconds * TICKS_PER_SECOND;
 }
 
@@ -443,6 +469,10 @@ int32_t Reflow_Run(uint32_t thetime, float meastemp, uint8_t* pheat, uint8_t* pf
 
 	if (manualsetpoint) {
 		PID.mySetpoint = (float)manualsetpoint;
+		// Keep intsetpoint in step with the manual target (preheat, bake,
+		// standby). Otherwise it holds a stale value and the runaway detector
+		// compares measured temp against the wrong setpoint -> false trips.
+		intsetpoint = manualsetpoint;
 
 		if (bake_timer > 0 && (Reflow_GetTimeLeft() == 0 || Reflow_GetTimeLeft() == -1)) {
 			retval = -1;
@@ -591,9 +621,30 @@ int Reflow_BBTune_GetCoolOffset(void) {
 	return bbtune_cool_result;
 }
 
+// A single tune phase should never legitimately take this long. Coast phases
+// wait for the cavity to peak/trough and rebound; once it has decayed to
+// ambient with the heat off, that rebound can never occur, deadlocking the
+// tune with no timeout. Abort after ~15 minutes in any one phase.
+#define TUNE_PHASE_TIMEOUT_TICKS (900 * 4)
+
 int32_t Reflow_BBTune_Work(uint8_t* pheat, uint8_t* pfan) {
 	Sensor_DoConversion();
 	float temp = Sensor_GetTemp(TC_AVERAGE);
+
+	static BBTunePhase_t bbtune_last_phase = BBTUNE_PROMPT;
+	static uint32_t bbtune_phase_ticks = 0;
+	if (bbtune_phase != bbtune_last_phase) {
+		bbtune_last_phase = bbtune_phase;
+		bbtune_phase_ticks = 0;
+	} else if (bbtune_phase != BBTUNE_DONE && bbtune_phase != BBTUNE_PROMPT) {
+		if (++bbtune_phase_ticks > TUNE_PHASE_TIMEOUT_TICKS) {
+			printf("\nBB Tune ABORTED: phase %d stalled (timeout) — offsets unchanged", bbtune_phase);
+			*pheat = 0;
+			*pfan = NV_GetConfig(REFLOW_MIN_FAN_SPEED);
+			bbtune_phase = BBTUNE_DONE;
+			return TICKS_MS(PID_TIMEBASE);
+		}
+	}
 
 	switch (bbtune_phase) {
 		case BBTUNE_HEATING:
@@ -779,6 +830,21 @@ int32_t Reflow_PIDTune_Work(uint8_t* pheat, uint8_t* pfan) {
 	float target = (float)PIDTUNE_TARGET;
 
 	pidtune_tick++;
+
+	static PIDTunePhase_t pidtune_last_phase = PIDTUNE_PROMPT;
+	static uint32_t pidtune_phase_ticks = 0;
+	if (pidtune_phase != pidtune_last_phase) {
+		pidtune_last_phase = pidtune_phase;
+		pidtune_phase_ticks = 0;
+	} else if (pidtune_phase != PIDTUNE_DONE && pidtune_phase != PIDTUNE_PROMPT) {
+		if (++pidtune_phase_ticks > TUNE_PHASE_TIMEOUT_TICKS) {
+			printf("\nPID Tune ABORTED: phase %d stalled (timeout) — gains unchanged", pidtune_phase);
+			*pheat = 0;
+			*pfan = NV_GetConfig(REFLOW_MIN_FAN_SPEED);
+			pidtune_phase = PIDTUNE_DONE;
+			return TICKS_MS(PID_TIMEBASE);
+		}
+	}
 
 	switch (pidtune_phase) {
 		case PIDTUNE_SETTLING:

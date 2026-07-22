@@ -161,7 +161,9 @@ static int rewrite_sector(int target_slot, const uint16_t* new_temps,
 
 	// Step 3: Write all cached profiles back
 	int new_count = 0;
-	int target_ok = 0;
+	// For a delete, success means the target slot is gone -- it is never written
+	// back, so seed target_ok=1 (otherwise Delete always reported failure).
+	int target_ok = deleting ? 1 : 0;
 	for (int i = 0; i < FLASH_PROFILE_MAX_SLOTS; i++) {
 		if (!cache_valid[i]) {
 			profile_valid[i] = 0;
@@ -200,6 +202,31 @@ void FlashProfiles_Init(void) {
 			profile_valid[i] = 0;
 		}
 	}
+
+	// Preload default GC10/GC50 profiles into slots 30-31 if empty
+	if (!profile_valid[30]) {
+		static const uint16_t gc10_temps[48] = {
+			 50,  70,  90, 110, 130, 145, 150, 153, 156, 159, 162, 165,
+			168, 171, 174, 177, 180, 183, 186, 190, 194, 198,
+			205, 215, 230, 240, 245,
+			240, 225, 205, 185, 165, 145, 130, 115, 100,
+			 85,  70,  55,   0,   0,   0,   0,   0,   0,   0,   0,   0
+		};
+		printf("\nPreloading LOCTITE GC 10 into flash slot 30");
+		FlashProfiles_WriteProfile(30, gc10_temps, "LOCTITE GC 10");
+	}
+	if (!profile_valid[31]) {
+		static const uint16_t gc50_temps[48] = {
+			 50,  70,  90, 110, 125, 140, 150, 155, 160, 165, 170, 175,
+			178, 180, 183, 185, 188, 190, 193, 195, 198, 200,
+			210, 225, 240, 245, 245,
+			235, 220, 200, 180, 160, 140, 125, 110,  95,
+			 80,  65,  50,   0,   0,   0,   0,   0,   0,   0,   0,   0
+		};
+		printf("\nPreloading LOCTITE GC 50 into flash slot 31");
+		FlashProfiles_WriteProfile(31, gc50_temps, "LOCTITE GC 50");
+	}
+
 	printf("\nFlash profiles: %d/%d slots used",
 		profile_count, FLASH_PROFILE_MAX_SLOTS);
 }
@@ -243,10 +270,12 @@ void FlashProfiles_BackupAll(void) {
 	printf("\n# T-962 Profile Backup\n");
 	printf("# Paste this into serial after reflashing to restore.\n");
 
-	// EEPROM profiles (survive reflashing)
+	// EEPROM profiles (survive reflashing). Use the helper so the indices track
+	// the profile table size (CUSTOM#1/#2 are the last two entries); the old
+	// hardcoded 5/6 pointed at GC50/CUSTOM#1 after the table grew and never
+	// backed up CUSTOM#2 at all.
 	printf("# --- EEPROM profiles ---\n");
-	Reflow_ExportProfile(5);  // CUSTOM#1
-	Reflow_ExportProfile(6);  // CUSTOM#2
+	Reflow_ExportCustomProfiles();
 
 	// Flash profiles (erased on firmware update)
 	printf("# --- Flash profiles (lost on update) ---\n");

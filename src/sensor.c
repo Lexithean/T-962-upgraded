@@ -93,15 +93,15 @@ void Sensor_ValidateNV(void) {
 
 	temp = NV_GetConfig(TC_LEFT_OFFSET);
 	if (temp == 255) {
-		temp = 100;
-		NV_SetConfig(TC_LEFT_OFFSET, temp); // Default +/-0 offset
+		temp = 127; // 0 offset: encoding is (nv-127)*0.5, so 127 == +/-0.00 C
+		NV_SetConfig(TC_LEFT_OFFSET, temp);
 	}
 	adcoffsetadj[0] = ((float)(temp - 127)) * 0.5f;
 
 	temp = NV_GetConfig(TC_RIGHT_OFFSET);
 	if (temp == 255) {
-		temp = 100;
-		NV_SetConfig(TC_RIGHT_OFFSET, temp); // Default +/-0 offset
+		temp = 127; // 0 offset (see above)
+		NV_SetConfig(TC_RIGHT_OFFSET, temp);
 	}
 	adcoffsetadj[1] = ((float)(temp - 127)) * 0.5f;
 
@@ -347,8 +347,10 @@ int Sensor_AutoCalibrate(void) {
 
 	// Offset encoding: actual = (nv - 127) * 0.5
 	// To reduce reading by `error`: new_nv = old_nv - (error / 0.5)
-	int new_left = nv_left - (int)(cal_error[0] * 2.0f + 0.5f);
-	int new_right = nv_right - (int)(cal_error[1] * 2.0f + 0.5f);
+	// Round symmetrically: (int)(x + 0.5) rounds negatives toward zero, so a
+	// negative error never fully corrected and the cal never converged.
+	int new_left = nv_left - (int)(cal_error[0] >= 0 ? cal_error[0] * 2.0f + 0.5f : cal_error[0] * 2.0f - 0.5f);
+	int new_right = nv_right - (int)(cal_error[1] >= 0 ? cal_error[1] * 2.0f + 0.5f : cal_error[1] * 2.0f - 0.5f);
 
 	// Clamp to valid NV range (0-254, 255 is reserved for uninitialised)
 	if (new_left < 0) new_left = 0;
@@ -362,6 +364,18 @@ int Sensor_AutoCalibrate(void) {
 	// Reload calibration values
 	adcoffsetadj[0] = ((float)(new_left - 127)) * 0.5f;
 	adcoffsetadj[1] = ((float)(new_right - 127)) * 0.5f;
+
+	// If the high-temp offset was tracking the ambient offset (the default when
+	// no separate hi-temp cal was done), move it with the ambient calibration so
+	// the correction holds across the range instead of fading out above 25C.
+	if (NV_GetConfig(TC_LEFT_OFFSET_HI) == nv_left) {
+		NV_SetConfig(TC_LEFT_OFFSET_HI, (uint8_t)new_left);
+		adcoffsetadj_hi[0] = adcoffsetadj[0];
+	}
+	if (NV_GetConfig(TC_RIGHT_OFFSET_HI) == nv_right) {
+		NV_SetConfig(TC_RIGHT_OFFSET_HI, (uint8_t)new_right);
+		adcoffsetadj_hi[1] = adcoffsetadj[1];
+	}
 
 	printf("\nTC Cal: ref=%.1fC L=%.1f(err=%+.1f) R=%.1f(err=%+.1f)",
 	       ref, left, cal_error[0], right, cal_error[1]);
