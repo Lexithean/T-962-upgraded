@@ -64,6 +64,11 @@ static int reflowPaused=0;
 
 // Safety: thermal runaway
 static uint8_t runaway_detected = 0;
+// The relative runaway check only arms once the setpoint has caught up to (met
+// or exceeded) the measured temperature. This avoids a false trip when a reflow
+// starts with the oven already hot (warm back-to-back boards, or a high preheat)
+// while the profile's opening setpoint is low. The absolute cutoff is unaffected.
+static uint8_t runaway_armed = 0;
 static float prev_avgtemp = 0;
 
 // Heater failure detection
@@ -91,6 +96,7 @@ static int32_t Reflow_Work(void) {
 	avgtemp = Sensor_GetTemp(TC_AVERAGE);
 
 	const char* modestr = "UNKNOWN";
+	uint8_t in_preheat = 0;
 
 	// Depending on mode we should run this with different parameters
 	if (mymode == REFLOW_STANDBY || mymode == REFLOW_STANDBYFAN) {
@@ -115,6 +121,7 @@ static int32_t Reflow_Work(void) {
 			// Preheat phase: heat to user-configured temp before starting the profile
 			Reflow_Run(0, avgtemp, &heat, &fan, preheat_temp);
 			modestr = "PREHEAT";
+			in_preheat = 1;
 			// Hold the profile clock at zero: the RTC that indexes the profile
 			// keeps running during preheat, so without this the profile would
 			// start at index = preheat_duration/10, skipping the initial ramp.
@@ -171,7 +178,15 @@ static int32_t Reflow_Work(void) {
 	// defeated by a bad (e.g. corrupt/uninitialised) setpoint.
 	if (mymode == REFLOW_REFLOW || mymode == REFLOW_BAKE) {
 		uint8_t thresh = NV_GetConfig(SAFETY_RUNAWAY_THRESH);
-		uint8_t relative_trip = (intsetpoint > 0 && intsetpoint <= SETPOINT_MAX &&
+		// Arm the relative check once the setpoint has met/passed the measured
+		// temperature (the oven is at or below where the profile wants it). Don't
+		// arm during preheat: its high setpoint would arm the check, then the drop
+		// to the profile's low opening setpoint would false-trip at the handoff.
+		if (!runaway_armed && !in_preheat && intsetpoint > 0 && avgtemp <= (float)intsetpoint) {
+			runaway_armed = 1;
+		}
+		uint8_t relative_trip = (runaway_armed && !in_preheat &&
+		                         intsetpoint > 0 && intsetpoint <= SETPOINT_MAX &&
 		                         thresh > 0 && thresh < 255 &&
 		                         avgtemp > (float)(intsetpoint + thresh));
 		uint8_t absolute_trip = (avgtemp > (float)REFLOW_ABS_TEMP_LIMIT);
@@ -247,6 +262,7 @@ static int32_t Reflow_Work(void) {
 			reflow_ramp_calc_temp = 0;
 			reflowdone = 0;
 			runaway_detected = 0;
+			runaway_armed = 0;
 		}
 	} else if (mymode == REFLOW_BAKE) {
 		if (bake_timer > 0 && numticks >= bake_timer) {
