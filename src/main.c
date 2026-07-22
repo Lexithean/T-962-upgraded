@@ -673,10 +673,16 @@ static int32_t Main_Work(void) {
 
 				// Extend watchdog timeout (cannot be disabled once enabled)
 				WDTC = 0xFFFFFFFF;
-				uint32_t save = VIC_DisableIRQ();
+
+				// Disable all interrupts and KEEP them disabled through the ISP
+				// jump. NXP requires interrupts off before Reinvoke ISP; a timer
+				// or UART interrupt during bootloader entry would vector into a
+				// stale user handler. Note: do NOT restore IRQs afterwards.
+				VIC_DisableIRQ();
+				VIC_DisableHandler(VIC_UART0);
+				VIC_DisableHandler(VIC_TIMER0);
 				WDFEED = 0xaa;
 				WDFEED = 0x55;
-				VIC_RestoreIRQ(save);
 
 				// Switch to legacy GPIO mode (bootloader requirement)
 				SCS = 0;
