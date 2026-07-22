@@ -159,12 +159,19 @@ static int32_t Reflow_Work(void) {
 		}
 	}
 
-	// Thermal runaway detection: abort if temp exceeds setpoint + threshold
-	if ((mymode == REFLOW_REFLOW || mymode == REFLOW_BAKE) && intsetpoint > 0) {
+	// Thermal runaway detection: abort if temp exceeds setpoint + threshold, OR
+	// if it exceeds an absolute ceiling regardless of setpoint. The absolute
+	// cutoff is a backstop: it still fires when the setpoint-relative check is
+	// defeated by a bad (e.g. corrupt/uninitialised) setpoint.
+	if (mymode == REFLOW_REFLOW || mymode == REFLOW_BAKE) {
 		uint8_t thresh = NV_GetConfig(SAFETY_RUNAWAY_THRESH);
-		if (thresh > 0 && thresh < 255 && avgtemp > (float)(intsetpoint + thresh)) {
-			printf("\n*** THERMAL RUNAWAY: %.1fC > %d+%dC setpoint! ***",
-			       avgtemp, intsetpoint, thresh);
+		uint8_t relative_trip = (intsetpoint > 0 && intsetpoint <= SETPOINT_MAX &&
+		                         thresh > 0 && thresh < 255 &&
+		                         avgtemp > (float)(intsetpoint + thresh));
+		uint8_t absolute_trip = (avgtemp > (float)REFLOW_ABS_TEMP_LIMIT);
+		if (relative_trip || absolute_trip) {
+			printf("\n*** THERMAL RUNAWAY: %.1fC (setpoint %d, %s trip) ***",
+			       avgtemp, intsetpoint, absolute_trip ? "absolute" : "relative");
 			runaway_detected = 1;
 			reflowdone = 1;
 			Buzzer_PlayAlarm();

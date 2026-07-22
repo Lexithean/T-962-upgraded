@@ -158,12 +158,25 @@ static void ByteswapTempProfile(uint16_t* buf) {
 	}
 }
 
+// Clamp any out-of-range stored setpoints to a safe value. A virgin I2C EEPROM
+// reads back 0xFF, so an unedited CUSTOM profile is all 0xFFFF; without this a
+// selected-but-unconfigured profile would command 65535C with the heater pinned.
+static void SanitizeProfile(uint16_t* temps) {
+	for (int i = 0; i < NUMPROFILETEMPS; i++) {
+		if (temps[i] > SETPOINT_MAX) {
+			temps[i] = 0;
+		}
+	}
+}
+
 void Reflow_LoadCustomProfiles(void) {
 	EEPROM_Read((uint8_t*)ee1.temperatures, 2, 96);
 	ByteswapTempProfile(ee1.temperatures);
+	SanitizeProfile(ee1.temperatures);
 
 	EEPROM_Read((uint8_t*)ee2.temperatures, 98 + 2, 96); // Moved from 128+2 to 98+2
 	ByteswapTempProfile(ee2.temperatures);
+	SanitizeProfile(ee2.temperatures);
 }
 
 void Reflow_ValidateNV(void) {
@@ -323,10 +336,17 @@ uint16_t Reflow_GetSetpointAtIdx(uint8_t idx) {
 	if (idx > (NUMPROFILETEMPS - 1)) {
 		return 0;
 	}
+	uint16_t sp;
 	if (profileidx >= NUMPROFILES) {
-		return flash_shadow.temperatures[idx];
+		sp = flash_shadow.temperatures[idx];
+	} else {
+		sp = profiles[profileidx]->temperatures[idx];
 	}
-	return profiles[profileidx]->temperatures[idx];
+	// Defence-in-depth: never hand an out-of-range stored setpoint to the PID
+	if (sp > SETPOINT_MAX) {
+		sp = 0;
+	}
+	return sp;
 }
 
 void Reflow_SetSetpointAtIdx(uint8_t idx, uint16_t value) {
