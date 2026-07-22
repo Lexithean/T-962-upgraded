@@ -69,12 +69,25 @@ static uint8_t runaway_detected = 0;
 // starts with the oven already hot (warm back-to-back boards, or a high preheat)
 // while the profile's opening setpoint is low. The absolute cutoff is unaffected.
 static uint8_t runaway_armed = 0;
+// Short reason for the safety-abort screen ("THERMAL RUNAWAY", "HEATER FAULT", ...)
+static const char* fault_reason = "SAFETY ABORT";
+
+// Cut heat and abort a run to standby with the alarm. All safety cutoffs funnel
+// through here so the heater is always killed immediately and the UI can show
+// why (via Reflow_GetFaultReason).
+static void Reflow_Abort(const char* reason) {
+	fault_reason = reason;
+	runaway_detected = 1;
+	reflowdone = 1;
+	Set_Heater(0);
+	Buzzer_PlayAlarm();
+	Reflow_SetMode(REFLOW_STANDBY);
+}
 static float prev_avgtemp = 0;
 
 // Heater failure detection
 static float heater_start_temp = 0;
 static uint32_t heater_fullheat_ticks = 0;
-static uint8_t heater_failure_warned = 0;
 
 // Cold start detection
 static uint8_t cold_start_logged = 0;
@@ -193,10 +206,7 @@ static int32_t Reflow_Work(void) {
 		if (relative_trip || absolute_trip) {
 			printf("\n*** THERMAL RUNAWAY: %.1fC (setpoint %d, %s trip) ***",
 			       avgtemp, intsetpoint, absolute_trip ? "absolute" : "relative");
-			runaway_detected = 1;
-			reflowdone = 1;
-			Buzzer_PlayAlarm();
-			Reflow_SetMode(REFLOW_STANDBY);
+			Reflow_Abort("THERMAL RUNAWAY");
 		}
 	}
 
@@ -223,30 +233,44 @@ static int32_t Reflow_Work(void) {
 		cold_start_logged = 1;
 	} else if (cold_start_logged && mymode == REFLOW_STANDBY) {
 		cold_start_logged = 0;
-		heater_failure_warned = 0;
 	}
 
-	// Heater element failure detection
-	// If heater is at 100% for 30s and temp hasn't risen 5°C, warn
+	// Heater/sensor failure cutoff.
+	// If the heater is at 100% for 30s and the measured temperature has not risen
+	// 5C, either the heater/SSR is dead OR the control thermocouple is reading low
+	// (disconnected/stuck) while the oven really is heating. Both are dangerous:
+	// the PID keeps commanding full heat. Cut heat and abort. A working oven ramps
+	// far faster than 5C/30s at full power, so this does not false-trip.
 	if (heat == 255 && (mymode == REFLOW_REFLOW || mymode == REFLOW_BAKE)) {
 		if (heater_fullheat_ticks == 0) {
 			heater_start_temp = avgtemp;
 			heater_fullheat_ticks = numticks;
 		}
-		// Check after 30 seconds of continuous full heat (120 ticks at 4Hz)
-		if (!heater_failure_warned && numticks > heater_fullheat_ticks + 120) {
+		if (numticks > heater_fullheat_ticks + 120) { // 30s at 4Hz
 			if (avgtemp < heater_start_temp + 5.0f) {
-				printf("\n[WARNING] HEATER FAILURE? Temp hasn't risen in 30s of full heat!");
-				printf("\n[WARNING] Start: %.1fC Now: %.1fC - Check SSR/element",
+				printf("\n*** HEATER/SENSOR FAULT: full heat 30s, no rise (%.1f->%.1fC) ***",
 				       heater_start_temp, avgtemp);
-				heater_failure_warned = 1;
+				Reflow_Abort("HEATER/SENSOR");
 			} else {
-				// Reset - temp is rising, heater is working
+				// Temp is rising, heater is working -- restart the window
 				heater_fullheat_ticks = 0;
 			}
 		}
 	} else {
 		heater_fullheat_ticks = 0;
+	}
+
+	// Thermocouple plausibility: during a run, a large disagreement between the
+	// two control thermocouples means one is faulty. Abort rather than regulate
+	// against a bad average.
+	if ((mymode == REFLOW_REFLOW || mymode == REFLOW_BAKE) && !in_preheat) {
+		float tl = Sensor_GetTemp(TC_LEFT), tr = Sensor_GetTemp(TC_RIGHT);
+		float diff = tl > tr ? tl - tr : tr - tl;
+		if (Sensor_IsValid(TC_LEFT) && Sensor_IsValid(TC_RIGHT) &&
+		    diff > (float)TC_DISAGREE_LIMIT) {
+			printf("\n*** SENSOR FAULT: L/R disagree %.1fC (L=%.1f R=%.1f) ***", diff, tl, tr);
+			Reflow_Abort("TC DISAGREE");
+		}
 	}
 
 	if (mymode != oldmode) {
@@ -445,6 +469,7 @@ int Reflow_GetTimeLeft(void) {
 // Safety: thermal runaway
 uint8_t Reflow_ThermalRunaway(void) { return runaway_detected; }
 void Reflow_ClearRunaway(void) { runaway_detected = 0; }
+const char* Reflow_GetFaultReason(void) { return fault_reason; }
 
 // Profile timing
 int Reflow_GetProfileDuration(void) {

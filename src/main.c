@@ -897,17 +897,17 @@ static int32_t Main_Work(void) {
 		static uint8_t alerted_peak = 0;
 		static uint8_t alerted_cooling = 0;
 
-		// Check for thermal runaway
+		// Check for a safety abort (runaway, heater/sensor fault, TC disagreement)
 		if (Reflow_ThermalRunaway()) {
 			LCD_FB_Clear();
-			showHeader("!! RUNAWAY !!");
+			showHeader("!! SAFETY ABORT !!");
 			for(uint8_t n=0;n<128;n++){
 				LCD_SetPixel(n,7);
 				LCD_SetPixel(n,64-9);
 			}
-			len = snprintf(buf, sizeof(buf), "THERMAL RUNAWAY");
+			len = snprintf(buf, sizeof(buf), "%s", Reflow_GetFaultReason());
 			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 14, FONT6X6 | INVERT);
-			len = snprintf(buf, sizeof(buf), "TEMP EXCEEDED LIMIT");
+			len = snprintf(buf, sizeof(buf), "RUN ABORTED");
 			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 24, FONT6X6);
 			len = snprintf(buf, sizeof(buf), "HEATER OFF - FAN ON");
 			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 34, FONT6X6);
