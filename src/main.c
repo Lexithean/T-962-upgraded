@@ -116,6 +116,23 @@ static const char* temp_unit(void) {
 	return "C";
 }
 
+// Minimal signed-decimal parser, e.g. "1.5", "-0.25", "20". Used instead of
+// sscanf("%f") so the build does not link newlib's float-scanf support.
+static float parse_decimal(const char* s) {
+	while (*s == ' ') s++;
+	int neg = 0;
+	if (*s == '-') { neg = 1; s++; }
+	else if (*s == '+') { s++; }
+	float val = 0.0f;
+	while (*s >= '0' && *s <= '9') { val = val * 10.0f + (float)(*s - '0'); s++; }
+	if (*s == '.') {
+		s++;
+		float frac = 0.1f;
+		while (*s >= '0' && *s <= '9') { val += (float)(*s - '0') * frac; frac *= 0.1f; s++; }
+	}
+	return neg ? -val : val;
+}
+
 static int32_t Main_Work(void);
 
 
@@ -323,7 +340,6 @@ static int32_t Main_Work(void) {
 	char* cmd_select_profile = "select profile %d";
 	char* cmd_bake = "bake %d %d";
 	char* cmd_dump_profile = "dump profile %d";
-	char* cmd_setting = "setting %d %f";
 	char* cmd_setOpMode = "set OpMode %d";
 	char* cmd_setOpModeThresh = "set OpThresh %d";
 	
@@ -511,7 +527,12 @@ static int32_t Main_Work(void) {
 				printf("\nDumping profile %d: %s\n ", param, Reflow_GetProfileName());
 				Reflow_DumpProfile(param);
 
-			} else if (sscanf(serial_cmd, cmd_setting, &param, &paramF) == 2) {
+			} else if (sscanf(serial_cmd, "setting %d", &param) == 1 && strchr(serial_cmd + 8, ' ')) {
+				// Value parsed by hand (parse_decimal) rather than sscanf %f, so
+				// the build does not pull in newlib's float-scanf (strtod/gethex),
+				// which alone is several KB of flash.
+				char* valstr = strchr(serial_cmd + 8, ' ') + 1;
+				paramF = parse_decimal(valstr);
 				if (param < 0 || param >= Setup_getNumItems() - 1) {
 					printf("\nSetting id must be 0-%d\n", Setup_getNumItems() - 2);
 				} else {
