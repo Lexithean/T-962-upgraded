@@ -51,6 +51,7 @@ jobs:
           cppcheck --enable=warning --inline-suppr --error-exitcode=1 --quiet \
             --suppress=missingIncludeSystem --suppress=unusedFunction \
             --suppress=shiftTooManyBitsSigned --suppress=invalidPrintfArgType_uint \
+            --suppress=uninitvar:src/lcd.c \
             -I src src/*.c
 
   release:

@@ -42,3 +42,7 @@ temp/
 simulator/
 # Generated at build time by create_version.py
 src/version.c
+
+# Compiled unit-test binaries
+tests/test_util
+tests/*.dSYM/
