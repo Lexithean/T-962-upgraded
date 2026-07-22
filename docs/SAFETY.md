@@ -7,7 +7,8 @@ nearby.
 
 - [Thermal runaway protection](#thermal-runaway-protection)
 - [Absolute over-temperature cutoff](#absolute-over-temperature-cutoff)
-- [Heater failure detection](#heater-failure-detection)
+- [Heater and sensor fault cutoff](#heater-and-sensor-fault-cutoff)
+- [Thermocouple disagreement cutoff](#thermocouple-disagreement-cutoff)
 - [Cooling rate control](#cooling-rate-control)
 - [Watchdog](#watchdog)
 - [Safe shutdown paths](#safe-shutdown-paths)
@@ -39,11 +40,25 @@ of failure the relative check cannot. You cannot disable it.
 
 ---
 
-## Heater failure detection
+## Heater and sensor fault cutoff
 
 If the heater is commanded to full power for 30 seconds but the temperature has not
-risen by at least 5 °C, the firmware logs a heater-failure warning to the serial
-console. That points to a failed SSR, a broken element, or a disconnected heater.
+risen by at least 5 °C, the firmware cuts the heat and aborts the run (heater off,
+fan on, alarm, and a "HEATER/SENSOR" abort screen). This catches two dangerous
+failures at once:
+
+- A dead heater, failed SSR, or disconnected element.
+- A control thermocouple reading low while the oven is actually hot (loose or
+  broken connector). This is the most dangerous failure of all, because the PID
+  would otherwise keep driving full heat into a real runaway that the
+  setpoint-relative check cannot see. A working oven ramps far faster than
+  5 °C in 30 s at full power, so this never false-trips.
+
+## Thermocouple disagreement cutoff
+
+During a run, if the two control thermocouples disagree by more than 60 °C, one of
+them is faulty, so the firmware aborts (showing "TC DISAGREE") rather than
+regulate against a bad average.
 
 ---
 
@@ -81,9 +96,11 @@ Firmware can only react to what it measures. The following are your job, and the
 matter more than any software feature:
 
 - **Thermocouples.** They should be mounted, intact, and reading the real board or
-  cavity temperature. A thermocouple that reads low while the oven is hot is the
-  most dangerous failure mode there is. Verify readings against an independent
-  thermometer after you install and calibrate (see [Calibration](CALIBRATION.md)).
+  cavity temperature. A thermocouple that reads low while the oven is hot used to
+  be the most dangerous failure mode; the heater/sensor fault cutoff above now
+  catches it, but a bad reading still spoils your reflow, so verify readings
+  against an independent thermometer after you install and calibrate (see
+  [Calibration](CALIBRATION.md)).
 - **Cold-junction sensor.** Fit a DS18B20 (or DS18S20/DS1822). Without it the
   firmware assumes a fixed ambient, which hurts accuracy.
 - **Mains earth.** Confirm the protective earth contacts the chassis and that both

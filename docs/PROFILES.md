@@ -77,6 +77,12 @@ reserved flash sector. From your point of view each profile writes atomically, a
 out-of-range slots, over-long temperatures, and malformed input are all rejected.
 The profile name is preserved even when you provide the full 48-point list.
 
+Each stored block carries a checksum. A block whose data is corrupt (for example
+from a power cut mid-write) fails the checksum and is ignored on the next boot, so
+the oven never runs a garbage profile. Writes are also read back and verified.
+Storage is a single reserved sector, though, so a power cut during the brief
+rewrite can still lose profiles; `backup` remains the way to guard against that.
+
 ---
 
 ## Editing on the oven
