@@ -410,10 +410,6 @@ void Reflow_SetSetpoint(uint16_t thesetpoint) {
 void Reflow_LoadSetpoint(void) {
 	intsetpoint = NV_GetConfig(REFLOW_BAKE_SETPOINT_H) << 8;
 	intsetpoint |= NV_GetConfig(REFLOW_BAKE_SETPOINT_L);
-
-	printf("\n bake setpoint values: %x, %x, %d\n",
-		NV_GetConfig(REFLOW_BAKE_SETPOINT_H),
-		NV_GetConfig(REFLOW_BAKE_SETPOINT_L), intsetpoint);
 }
 
 int16_t Reflow_GetActualTemp(void) {

@@ -826,11 +826,8 @@ static int32_t Main_Work(void) {
 				LCD_FB_Clear();
 				len = snprintf(buf, sizeof(buf), "FACTORY RESET OK");
 				LCD_disp_str((uint8_t*)buf, len, 13, 28, FONT6X6);
-				LCD_FB_Update();
+				LCD_FB_Update(); // show "FACTORY RESET OK" before returning home
 				Buzzer_Beep(BUZZ_1KHZ, 255, TICKS_MS(100));
-				// Brief pause so user sees the message
-				int wait = 20; // ~2 seconds at 100ms ticks
-				while (wait-- > 0) { retval = TICKS_MS(100); }
 				mode = MAIN_HOME;
 				Reflow_SetMode(REFLOW_STANDBY);
 				retval = 0;
@@ -1543,7 +1540,7 @@ static int32_t Main_Work(void) {
 		}else{
 			drawSprites();
 
-			if (keyspressed & KEY_S) {
+			if (keyspressed & KEY_ANY) { // any key wakes the screensaver
 				retval=0;
 				mode=MAIN_HOME;
 			}

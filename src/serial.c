@@ -99,6 +99,13 @@ int uart_hasline(void) {
 	for (unsigned int i = 0; i < n; i++) {
 		if (circ_buf_peek(&rxbuf, i) == '\n') return 1;
 	}
+	// No newline yet. If the ring is full, the line is already longer than any
+	// command buffer and its newline was dropped on overflow, so it can never
+	// complete -- flush it, otherwise the full ring drops all future bytes and
+	// the console wedges permanently on one overlong/garbage line.
+	if (n >= CIRCBUFSIZE - 1) {
+		circ_buf_flush(&rxbuf);
+	}
 	return 0;
 }
 
