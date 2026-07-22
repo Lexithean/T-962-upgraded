@@ -37,7 +37,9 @@ uint8_t chkAdvCmd(tcirc_buf* buf, advancedSerialCMD* cmd) {
 			return 0;
 		}
 		//verify we have enough bytes buffered to verify a CRC -> if not, abort and try again next time
-		if (circ_buf_count(buf) < ((unsigned)circ_buf_peek(buf, ADVCMD_SIZE_LOC) + ADVCMD_OVERHEAD)) return 0;
+		//need: 4 header bytes + cmdSize payload bytes + 1 data-CRC byte (peeked at
+		//offset cmdSize after the header is consumed at line ~47)
+		if (circ_buf_count(buf) < ((unsigned)circ_buf_peek(buf, ADVCMD_SIZE_LOC) + ADVCMD_OVERHEAD + 1)) return 0;
 
 		//there is a full, verifyable command in the ring - lets go!
 		uart_readc(); uart_readc(); // flush the 0xFF55

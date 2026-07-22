@@ -331,7 +331,10 @@ static int32_t Main_Work(void) {
 			case SetEEProfileCmd:
 			{
 				EEProfileCMD EEcmd;
-				memcpy(&EEcmd, &advCmd.data, sizeof(advCmd.data));
+				// Copy only as many bytes as the destination holds. advCmd.data
+				// is 256 bytes; EEProfileCMD is 98. Copying sizeof(advCmd.data)
+				// smashed ~158 bytes of this stack frame with sender-controlled data.
+				memcpy(&EEcmd, &advCmd.data, sizeof(EEcmd));
 			
 				if (EEcmd.profileNum == 1 || EEcmd.profileNum == 2) {
 					printf("\nSetting EE profile %d:\n ", advCmd.data[0]);
