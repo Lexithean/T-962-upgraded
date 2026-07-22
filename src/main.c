@@ -346,8 +346,7 @@ static int32_t Main_Work(void) {
 						Reflow_SetSetpointAtIdx(i, EEcmd.tempData[i]);
 					}
 					Reflow_SaveEEProfile();
-					if (EEcmd.profileNum == 1) Reflow_DumpProfile(5); //CUSTOM#1
-					else Reflow_DumpProfile(6); //CUSTOM#2
+					Reflow_DumpProfile(Reflow_GetProfileIdx()); // the slot we just selected
 				}
 				else {
 					printf("\nOnly EEPROM profile 1 and 2 are supported for this command.\n");
@@ -364,7 +363,7 @@ static int32_t Main_Work(void) {
 				uart_rxflush();
 			}
 		}
-	} else if (uart_available() > 3) {
+	} else if (uart_hasline()) {
 		int len = uart_readline(serial_cmd, 255);
 
 		if (len > 0) {
@@ -551,7 +550,7 @@ static int32_t Main_Work(void) {
 					}
 					Reflow_SaveEEProfile();
 					printf("\nImported %d temperature points to CUSTOM#%d\n", idx, profNum);
-					Reflow_DumpProfile(profNum == 1 ? 5 : 6);
+					Reflow_DumpProfile(Reflow_GetProfileIdx()); // the slot we just selected
 				} else {
 					printf("\nOnly CUSTOM profile 1 or 2 supported (import profile 1 or 2)\n");
 				}

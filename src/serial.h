@@ -15,5 +15,6 @@ void uart_rxflush(void);
 unsigned uart_available(void);
 uint8_t uart_chkAdvCmd(advancedSerialCMD* advCmd);
 int uart_readline(char* buffer, int max_len);
+int uart_hasline(void);
 
 #endif /* SERIAL_H_ */

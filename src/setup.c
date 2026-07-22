@@ -72,6 +72,11 @@ float Setup_getValue(int item) {
 
 void Setup_setValue(int item, int value) {
 	if (item < 0 || item >= (int)NUM_SETUP_ITEMS) return;
+	// Clamp to the item's declared range. Centralising it here covers the serial
+	// 'setting' path and the factory-fresh case where a raw 255 NV byte gets
+	// decremented but stays above maxval (the menu decrement only clamped low).
+	if (value < setupmenu[item].minval) value = setupmenu[item].minval;
+	if (value > setupmenu[item].maxval) value = setupmenu[item].maxval;
 	NV_SetConfig(setupmenu[item].nvval, value);
 	Reflow_ValidateNV();
 }
