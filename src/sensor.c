@@ -93,15 +93,15 @@ void Sensor_ValidateNV(void) {
 
 	temp = NV_GetConfig(TC_LEFT_OFFSET);
 	if (temp == 255) {
-		temp = 100;
-		NV_SetConfig(TC_LEFT_OFFSET, temp); // Default +/-0 offset
+		temp = 127; // 0 offset: encoding is (nv-127)*0.5, so 127 == +/-0.00 C
+		NV_SetConfig(TC_LEFT_OFFSET, temp);
 	}
 	adcoffsetadj[0] = ((float)(temp - 127)) * 0.5f;
 
 	temp = NV_GetConfig(TC_RIGHT_OFFSET);
 	if (temp == 255) {
-		temp = 100;
-		NV_SetConfig(TC_RIGHT_OFFSET, temp); // Default +/-0 offset
+		temp = 127; // 0 offset (see above)
+		NV_SetConfig(TC_RIGHT_OFFSET, temp);
 	}
 	adcoffsetadj[1] = ((float)(temp - 127)) * 0.5f;
 

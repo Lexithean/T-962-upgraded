@@ -834,41 +834,27 @@ static int32_t Main_Work(void) {
 	// About
 	} else if (mode == MAIN_ABOUT) {
 		if(modeChange){
+			// Clean, centred layout. The old screen drew the full-screen logo
+			// then overlaid right-aligned text on top of it, which rendered as
+			// a garbled overlap.
 			LCD_FB_Clear();
-			LCD_BMPDisplay(logobmp, 0, 0);
-			uint8_t n,i;
-
-			for(n=0;n<8;n++){
-				for(i=0;i<5;i++){
-					if( (i>1) || (n>0 && i>0) || (n>1 && i==0) )
-						LCD_disp_str((uint8_t*)" ", 1, (128-8*6)+(n*6), 26+(i*7), FONT6X6|INVERT);
-				}
-			}
-
-			for(n=0;n<22;n++){
-				LCD_disp_str((uint8_t*)" ", 1, n*6, 2, FONT6X6);
-				LCD_disp_str((uint8_t*)" ", 1, n*6, 64-10, FONT6X6);
-				LCD_disp_str((uint8_t*)" ", 1, n*6, 64-7, FONT6X6);
-			}
-
-			for(n=0;n<128;n++){
+			for(uint8_t n=0;n<128;n++){
 				LCD_SetPixel(n,7);
 				LCD_SetPixel(n,64-9);
 			}
-
-
 			len = snprintf(buf, sizeof(buf), "REFLOWOS");
-			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_RIGHT(len), 20, FONT6X6);
-			len = snprintf(buf, sizeof(buf), "BY SCHEMARA.COM");
-			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_RIGHT(len), 28, FONT6X6);
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 11, FONT6X6);
+			len = snprintf(buf, sizeof(buf), "by Schemara.com");
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 20, FONT6X6);
 			len = snprintf(buf, sizeof(buf), "VER %s", Version_GetGitVersion());
-			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_RIGHT(len), 36, FONT6X6);
-			len = snprintf(buf, sizeof(buf), "UNIFIED ENGINEERING");
-			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_RIGHT(len), 44, FONT6X6);
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 32, FONT6X6);
+			len = snprintf(buf, sizeof(buf), "Based on Unified");
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 41, FONT6X6);
+			len = snprintf(buf, sizeof(buf), "Engineering T-962");
+			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 49, FONT6X6);
 
-			LCD_disp_str((uint8_t*)"  ", 2, 128-12, 64-10, FONT6X6 | INVERT);
-			LCD_disp_str((uint8_t*)"S", 1, 128-9, 64-10, FONT6X6 | INVERT);
-
+			LCD_disp_str((uint8_t*)"  ", 2, 128-12, 64-7, FONT6X6 | INVERT);
+			LCD_disp_str((uint8_t*)"S", 1, 128-9, 64-7, FONT6X6 | INVERT);
 		}
 		retval = TICKS_MS(100);
 		showHeader("ABOUT");
