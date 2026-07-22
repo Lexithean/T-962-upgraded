@@ -113,7 +113,11 @@ static int32_t Reflow_Work(void) {
 			// Preheat phase: heat to user-configured temp before starting the profile
 			Reflow_Run(0, avgtemp, &heat, &fan, preheat_temp);
 			modestr = "PREHEAT";
-			// Don't increment ticks - profile timer hasn't started
+			// Hold the profile clock at zero: the RTC that indexes the profile
+			// keeps running during preheat, so without this the profile would
+			// start at index = preheat_duration/10, skipping the initial ramp.
+			RTC_Zero();
+			ticks = 0;
 		} else {
 			uint8_t done_now = Reflow_Run(ticks, avgtemp, &heat, &fan, 0) ? 1 : 0;
 			if (done_now && !reflowdone) {
