@@ -888,7 +888,7 @@ static int32_t Main_Work(void) {
 			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 24, FONT6X6);
 			len = snprintf(buf, sizeof(buf), "HEATER OFF - FAN ON");
 			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 34, FONT6X6);
-			len = snprintf(buf, sizeof(buf), "TEMP: %.0f`", Sensor_GetTemp(TC_AVERAGE));
+			len = snprintf(buf, sizeof(buf), "TEMP: %.0f`%s", display_temp(Sensor_GetTemp(TC_AVERAGE)), temp_unit());
 			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 44, FONT6X6);
 
 			int y = 64 - 7;
@@ -1053,7 +1053,7 @@ static int32_t Main_Work(void) {
 			LCD_disp_str((uint8_t*)"F2", 2, LCD_ALIGN_RIGHT(2), y, FONT6X6 | INVERT);
 			f2function = '+';
 		}
-		len = snprintf(buf, sizeof(buf), "%c SETPOINT %d`%s %c", f1function, (int)setpoint, temp_unit(), f2function);
+		len = snprintf(buf, sizeof(buf), "%c SETPOINT %d`%s %c", f1function, (int)(display_temp((float)setpoint) + 0.5f), temp_unit(), f2function);
 		LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), y, FONT6X6);
 
 
@@ -1545,7 +1545,7 @@ static int32_t Main_Work(void) {
 		len = snprintf(buf, sizeof(buf), "%s", Reflow_GetProfileName());
 		LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), (8 * 6)+1, FONT6X6 | INVERT);
 
-		len = snprintf(buf,sizeof(buf), " OVEN TEMPERATURE %d` ", Reflow_GetActualTemp());
+		len = snprintf(buf,sizeof(buf), " OVEN TEMPERATURE %.0f`%s ", display_temp((float)Reflow_GetActualTemp()), temp_unit());
 		LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 64 - 6, FONT6X6);
 
 		// Make sure reflow complete beep is silenced when pressing any key
