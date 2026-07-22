@@ -264,9 +264,10 @@ void displayReflowScreen(uint32_t keyspressed, uint8_t modeChange,uint8_t isDone
 	int16_t diff=Reflow_GetSetpoint()-Reflow_GetActualTemp();
 
 	if((isDone==1) || (reflowDisplay==0)){
-		Reflow_PlotDots();
-
 		if(isDone==1){
+			// Completion summary: clear the framebuffer first so the analytics
+			// text is not drawn over the still-present profile graph.
+			LCD_FB_Clear();
 			LCD_BMPDisplay(exitbmp, 128 - 18, 64-18);
 			if (Reflow_ThermalRunaway()) {
 				LCD_disp_str((uint8_t*)"SAFETY ABORT", 12, LCD_ALIGN_CENTER(12), 0, (blinkOn==1?FONT6X6|INVERT:FONT6X6));
@@ -296,6 +297,7 @@ void displayReflowScreen(uint32_t keyspressed, uint8_t modeChange,uint8_t isDone
 			len = snprintf(buf, sizeof(buf), "Press S for menu");
 			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 54, FONT6X6);
 		}else{
+			Reflow_PlotDots(); // live graph view
 			LCD_BMPDisplay(stopbmp, 128 - 18, 0);
 
 			len = snprintf(buf, sizeof(buf), "SET %03u", Reflow_GetSetpoint());
