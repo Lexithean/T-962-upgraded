@@ -413,8 +413,9 @@ uint16_t Reflow_GetSetpoint(void) {
 }
 
 void Reflow_SetBakeTimer(int seconds) {
-	// reset ticks to 0 when adjusting timer.
-	numticks = 0;
+	// Do NOT reset numticks here. A fresh bake already resets it on the
+	// STANDBY->BAKE mode change; zeroing it on every timer adjustment restarted
+	// the elapsed count each time the operator nudged the timer mid-bake.
 	bake_timer = seconds * TICKS_PER_SECOND;
 }
 

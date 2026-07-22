@@ -40,7 +40,7 @@ static setupMenuStruct setupmenu[] = {
 	{"Screensaver mins %4.0f",	SCREENSAVER_ACTIVE, 	 0, 60, 0, 1.0f,		"Screensaver       OFF","Screensaver    1 HOUR"},
 	{"Runaway thresh %3.0fC",	SAFETY_RUNAWAY_THRESH,	 0, 50, 0, 1.0f,		"Runaway prot.     OFF","Runaway thresh    50C"},
 	{"Buzzer alerts  %4.0f",	REFLOW_BUZZER_ALERTS,	 0, 1, 0, 1.0f,		"Buzzer alerts     OFF","Buzzer alerts      ON"},
-	{"Max cool rate %3.0f/s",	REFLOW_MAX_COOL_RATE,	 0, 50, 0, 0.1f,		"Max cool rate UNLIMIT","Max cool rate  5.0C/s"},
+	{"Max cool rate %3.1f/s",	REFLOW_MAX_COOL_RATE,	 0, 50, 0, 0.1f,		"Max cool rate UNLIMIT","Max cool rate  5.0C/s"},
 	{"L TC hi-off %+1.2f",		TC_LEFT_OFFSET_HI, 	 0, 254, -127, 0.50f,	"L TC hi-off   -63.50","L TC hi-off    63.50"},
 	{"R TC hi-off %+1.2f",		TC_RIGHT_OFFSET_HI, 	 0, 254, -127, 0.50f,	"R TC hi-off   -63.50","R TC hi-off    63.50"},
 	{"Temp unit    %4.0f",		TEMP_UNIT_FAHRENHEIT,	 0, 1, 0, 1.0f,		"Temp unit       DEG C","Temp unit       DEG F"},

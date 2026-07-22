@@ -674,6 +674,7 @@ static int32_t Main_Work(void) {
 			} else if (strcmp(serial_cmd, "factory reset") == 0) {
 				NV_FactoryReset();
 				Reflow_ValidateNV();
+				Sensor_ValidateNV(); // reload TC gain/offset RAM cache too
 				Reflow_LoadCustomProfiles();
 				printf("\nReboot recommended.\n");
 
@@ -793,6 +794,7 @@ static int32_t Main_Work(void) {
 				// Factory reset from UI
 				NV_FactoryReset();
 				Reflow_ValidateNV();
+				Sensor_ValidateNV(); // reload TC gain/offset RAM cache too
 				Reflow_LoadCustomProfiles();
 				LCD_FB_Clear();
 				len = snprintf(buf, sizeof(buf), "FACTORY RESET OK");
