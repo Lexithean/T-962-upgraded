@@ -16,6 +16,7 @@
 #include "flashprofiles.h"
 #include "reflow_profiles.h"
 #include "vic.h"
+#include "util.h"
 
 // IAP ROM entry point
 typedef void (*IAP)(unsigned int[], unsigned int[]);
@@ -35,17 +36,12 @@ typedef struct {
 	uint8_t  _reserved[256 - 4 - FLASH_PROFILE_NAME_LEN - 96 - 4];
 } FlashProfileBlock_t;
 
-// Rolling checksum over everything up to (not including) the checksum field.
-// A block with valid magic but a mismatched checksum is a half-written/corrupt
-// block and is treated as invalid, so the oven never runs garbage temperatures.
+// Checksum over everything up to (not including) the checksum field. A block
+// with valid magic but a mismatched checksum is a half-written/corrupt block and
+// is treated as invalid, so the oven never runs garbage temperatures.
 static uint32_t flash_block_checksum(const FlashProfileBlock_t* b) {
-	uint32_t c = 0x1234ABCDu;
-	const uint8_t* p = (const uint8_t*)b;
-	unsigned n = (unsigned)((const uint8_t*)&b->checksum - (const uint8_t*)b);
-	for (unsigned i = 0; i < n; i++) {
-		c = ((c << 1) | (c >> 31)) ^ p[i];
-	}
-	return c;
+	size_t n = (const uint8_t*)&b->checksum - (const uint8_t*)b;
+	return rolling_checksum(b, n);
 }
 
 static int flash_block_valid(const FlashProfileBlock_t* b) {

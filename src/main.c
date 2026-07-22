@@ -45,6 +45,7 @@
 #include "setup.h"
 #include "ui_extras.h"
 #include "flashprofiles.h"
+#include "util.h"
 
 
 extern uint8_t logobmp[];
@@ -114,23 +115,6 @@ static const char* temp_unit(void) {
 		return "F";
 	}
 	return "C";
-}
-
-// Minimal signed-decimal parser, e.g. "1.5", "-0.25", "20". Used instead of
-// sscanf("%f") so the build does not link newlib's float-scanf support.
-static float parse_decimal(const char* s) {
-	while (*s == ' ') s++;
-	int neg = 0;
-	if (*s == '-') { neg = 1; s++; }
-	else if (*s == '+') { s++; }
-	float val = 0.0f;
-	while (*s >= '0' && *s <= '9') { val = val * 10.0f + (float)(*s - '0'); s++; }
-	if (*s == '.') {
-		s++;
-		float frac = 0.1f;
-		while (*s >= '0' && *s <= '9') { val += (float)(*s - '0') * frac; frac *= 0.1f; s++; }
-	}
-	return neg ? -val : val;
 }
 
 static int32_t Main_Work(void);
