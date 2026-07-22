@@ -1038,6 +1038,7 @@ static int32_t Main_Work(void) {
 		// timer ++
 		if (keyspressed & KEY_F4) {
 			timer += keyrepeataccel;
+			if (timer > BAKE_TIMER_MAX) timer = BAKE_TIMER_MAX;
 		}
 
 		int y = 10;

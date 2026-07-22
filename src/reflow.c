@@ -49,7 +49,9 @@ static float avgtemp;
 
 static uint8_t reflowdone = 0;
 static ReflowMode_t mymode = REFLOW_STANDBY;
-static uint16_t numticks = 0;
+// uint32: a 36h bake is 518400 ticks at 4Hz, far beyond a uint16's 65535
+// (~4h33m) after which the numticks >= bake_timer test could never fire.
+static uint32_t numticks = 0;
 
 static int standby_logging = 0;
 
@@ -454,6 +456,10 @@ int32_t Reflow_Run(uint32_t thetime, float meastemp, uint8_t* pheat, uint8_t* pf
 
 	if (manualsetpoint) {
 		PID.mySetpoint = (float)manualsetpoint;
+		// Keep intsetpoint in step with the manual target (preheat, bake,
+		// standby). Otherwise it holds a stale value and the runaway detector
+		// compares measured temp against the wrong setpoint -> false trips.
+		intsetpoint = manualsetpoint;
 
 		if (bake_timer > 0 && (Reflow_GetTimeLeft() == 0 || Reflow_GetTimeLeft() == -1)) {
 			retval = -1;
@@ -602,9 +608,30 @@ int Reflow_BBTune_GetCoolOffset(void) {
 	return bbtune_cool_result;
 }
 
+// A single tune phase should never legitimately take this long. Coast phases
+// wait for the cavity to peak/trough and rebound; once it has decayed to
+// ambient with the heat off, that rebound can never occur, deadlocking the
+// tune with no timeout. Abort after ~15 minutes in any one phase.
+#define TUNE_PHASE_TIMEOUT_TICKS (900 * 4)
+
 int32_t Reflow_BBTune_Work(uint8_t* pheat, uint8_t* pfan) {
 	Sensor_DoConversion();
 	float temp = Sensor_GetTemp(TC_AVERAGE);
+
+	static BBTunePhase_t bbtune_last_phase = BBTUNE_PROMPT;
+	static uint32_t bbtune_phase_ticks = 0;
+	if (bbtune_phase != bbtune_last_phase) {
+		bbtune_last_phase = bbtune_phase;
+		bbtune_phase_ticks = 0;
+	} else if (bbtune_phase != BBTUNE_DONE && bbtune_phase != BBTUNE_PROMPT) {
+		if (++bbtune_phase_ticks > TUNE_PHASE_TIMEOUT_TICKS) {
+			printf("\nBB Tune ABORTED: phase %d stalled (timeout) — offsets unchanged", bbtune_phase);
+			*pheat = 0;
+			*pfan = NV_GetConfig(REFLOW_MIN_FAN_SPEED);
+			bbtune_phase = BBTUNE_DONE;
+			return TICKS_MS(PID_TIMEBASE);
+		}
+	}
 
 	switch (bbtune_phase) {
 		case BBTUNE_HEATING:
@@ -790,6 +817,21 @@ int32_t Reflow_PIDTune_Work(uint8_t* pheat, uint8_t* pfan) {
 	float target = (float)PIDTUNE_TARGET;
 
 	pidtune_tick++;
+
+	static PIDTunePhase_t pidtune_last_phase = PIDTUNE_PROMPT;
+	static uint32_t pidtune_phase_ticks = 0;
+	if (pidtune_phase != pidtune_last_phase) {
+		pidtune_last_phase = pidtune_phase;
+		pidtune_phase_ticks = 0;
+	} else if (pidtune_phase != PIDTUNE_DONE && pidtune_phase != PIDTUNE_PROMPT) {
+		if (++pidtune_phase_ticks > TUNE_PHASE_TIMEOUT_TICKS) {
+			printf("\nPID Tune ABORTED: phase %d stalled (timeout) — gains unchanged", pidtune_phase);
+			*pheat = 0;
+			*pfan = NV_GetConfig(REFLOW_MIN_FAN_SPEED);
+			pidtune_phase = PIDTUNE_DONE;
+			return TICKS_MS(PID_TIMEBASE);
+		}
+	}
 
 	switch (pidtune_phase) {
 		case PIDTUNE_SETTLING:
