@@ -105,6 +105,18 @@ buzzer, and shows the post-reflow analytics:
 | **TAL (>217)** | Time above liquidus, in seconds spent above 217 °C (the SAC305 liquidus point) |
 | **MAX RAMP** | Fastest heating rate observed, in °C/s |
 
+Below the numbers, a one-line **Result** grades the run against the profile's own
+intended peak:
+
+<img src="images/21-reflow-grade.png" width="440" alt="Reflow complete with grade">
+
+| Result | Meaning |
+|--------|---------|
+| **PROFILE MET** | Peak within 12 °C of the profile's target, ramp within 3 °C/s |
+| **PEAK LOW** | The oven did not reach the profile's peak (undershoot) |
+| **PEAK HIGH** | The oven overshot past the profile's peak |
+| **RAMP FAST** | The fastest ramp exceeded the recommended 3 °C/s |
+
 These same analytics are also tracked during a bake, not just a reflow.
 
 Press **S** to return. (The screen reads "Press F4 for menu", but only **S**
@@ -116,9 +128,11 @@ reflow spec for your solder paste.
 <img src="images/15-thermal-runaway.png" width="440" alt="Thermal runaway alert">
 
 If the temperature climbs past setpoint plus your runaway threshold, or past the
-absolute 280 °C ceiling regardless of setpoint, the firmware aborts at once. It
-turns the heater off, turns the fan on, sounds the alarm, and shows this screen.
-Press any key to dismiss it. The [Safety guide](SAFETY.md) lists every protection.
+absolute 280 °C ceiling, or a heater/sensor fault or thermocouple disagreement is
+detected, the firmware aborts at once. It turns the heater off, turns the fan on,
+sounds the alarm, and shows this screen with the reason (THERMAL RUNAWAY,
+HEATER/SENSOR, or TC DISAGREE). Press any key to dismiss it. The
+[Safety guide](SAFETY.md) lists every protection.
 
 ---
 

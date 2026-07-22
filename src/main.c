@@ -45,6 +45,7 @@
 #include "setup.h"
 #include "ui_extras.h"
 #include "flashprofiles.h"
+#include "util.h"
 
 
 extern uint8_t logobmp[];
@@ -114,23 +115,6 @@ static const char* temp_unit(void) {
 		return "F";
 	}
 	return "C";
-}
-
-// Minimal signed-decimal parser, e.g. "1.5", "-0.25", "20". Used instead of
-// sscanf("%f") so the build does not link newlib's float-scanf support.
-static float parse_decimal(const char* s) {
-	while (*s == ' ') s++;
-	int neg = 0;
-	if (*s == '-') { neg = 1; s++; }
-	else if (*s == '+') { s++; }
-	float val = 0.0f;
-	while (*s >= '0' && *s <= '9') { val = val * 10.0f + (float)(*s - '0'); s++; }
-	if (*s == '.') {
-		s++;
-		float frac = 0.1f;
-		while (*s >= '0' && *s <= '9') { val += (float)(*s - '0') * frac; frac *= 0.1f; s++; }
-	}
-	return neg ? -val : val;
 }
 
 static int32_t Main_Work(void);
@@ -897,17 +881,17 @@ static int32_t Main_Work(void) {
 		static uint8_t alerted_peak = 0;
 		static uint8_t alerted_cooling = 0;
 
-		// Check for thermal runaway
+		// Check for a safety abort (runaway, heater/sensor fault, TC disagreement)
 		if (Reflow_ThermalRunaway()) {
 			LCD_FB_Clear();
-			showHeader("!! RUNAWAY !!");
+			showHeader("!! SAFETY ABORT !!");
 			for(uint8_t n=0;n<128;n++){
 				LCD_SetPixel(n,7);
 				LCD_SetPixel(n,64-9);
 			}
-			len = snprintf(buf, sizeof(buf), "THERMAL RUNAWAY");
+			len = snprintf(buf, sizeof(buf), "%s", Reflow_GetFaultReason());
 			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 14, FONT6X6 | INVERT);
-			len = snprintf(buf, sizeof(buf), "TEMP EXCEEDED LIMIT");
+			len = snprintf(buf, sizeof(buf), "RUN ABORTED");
 			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 24, FONT6X6);
 			len = snprintf(buf, sizeof(buf), "HEATER OFF - FAN ON");
 			LCD_disp_str((uint8_t*)buf, len, LCD_ALIGN_CENTER(len), 34, FONT6X6);

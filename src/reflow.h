@@ -17,6 +17,9 @@ typedef enum eReflowMode {
 // (~250C) but a hard backstop against a stuck/garbage setpoint. Independent of
 // the user-configurable setpoint-relative runaway threshold.
 #define REFLOW_ABS_TEMP_LIMIT (280)
+// Max allowed disagreement between the two control thermocouples during a run.
+// A larger gap means one is faulty, so abort rather than regulate on a bad avg.
+#define TC_DISAGREE_LIMIT (60)
 #define TOTAL_DOTS	110
 
 #define BBTUNE_TARGET_HIGH (200)
@@ -53,8 +56,9 @@ void Reflow_ToggleStandbyLogging(void);
 void Reflow_PlotDots(void);
 
 // Safety & timing
-uint8_t Reflow_ThermalRunaway(void);   // Returns 1 if runaway detected
+uint8_t Reflow_ThermalRunaway(void);   // Returns 1 if a safety abort occurred
 void Reflow_ClearRunaway(void);
+const char* Reflow_GetFaultReason(void); // Short reason for the abort screen
 int Reflow_GetProfileDuration(void);   // Total profile time in seconds
 int Reflow_GetElapsedTime(void);       // Elapsed profile time in seconds
 
@@ -98,5 +102,6 @@ void Reflow_LoadPIDTuning(void);
 float Reflow_GetPeakTemp(void);
 int Reflow_GetTAL(void);
 float Reflow_GetMaxRamp(void);
+const char* Reflow_GetGrade(void); // Verdict vs the profile: "PROFILE MET", "PEAK LOW", ...
 
 #endif /* REFLOW_H_ */

@@ -111,3 +111,14 @@ how changes are regression-tested without a physical oven.
 
 The simulator is local development tooling and is not part of the shipped firmware.
 If you are contributing, see the build and usage notes bundled with it.
+
+For quick portable checks there are also native unit tests for the
+hardware-independent logic:
+
+```bash
+make -C tests
+```
+
+These run in CI on every push and pull request, alongside a cppcheck static
+analysis pass, so regressions in the pure logic and common bug classes are caught
+automatically.

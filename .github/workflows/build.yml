@@ -33,6 +33,27 @@ jobs:
           name: T-962-controller
           path: build/T-962-controller.hex
 
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run native unit tests
+        run: make -C tests
+
+  static-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cppcheck
+        run: sudo apt-get update && sudo apt-get install -y cppcheck
+      - name: Run cppcheck
+        run: |
+          cppcheck --enable=warning --inline-suppr --error-exitcode=1 --quiet \
+            --suppress=missingIncludeSystem --suppress=unusedFunction \
+            --suppress=shiftTooManyBitsSigned --suppress=invalidPrintfArgType_uint \
+            --suppress=uninitvar:src/lcd.c \
+            -I src src/*.c
+
   release:
     needs: build
     runs-on: ubuntu-latest

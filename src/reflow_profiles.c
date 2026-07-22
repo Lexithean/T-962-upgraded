@@ -420,6 +420,17 @@ void Reflow_ExportProfile(int profile) {
 	profileidx = current;
 }
 
+// Highest setpoint in the current profile -- the intended peak, used to grade a
+// finished run.
+uint16_t Reflow_GetProfilePeak(void) {
+	uint16_t peak = 0;
+	for (int i = 0; i < NUMPROFILETEMPS; i++) {
+		uint16_t v = Reflow_GetSetpointAtIdx(i);
+		if (v > peak) peak = v;
+	}
+	return peak;
+}
+
 // Export both editable CUSTOM profiles (the last two table entries) in
 // import-compatible form. Kept here because NUMPROFILES is file-local.
 void Reflow_ExportCustomProfiles(void) {

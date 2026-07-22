@@ -65,8 +65,10 @@ command dumps everything as pasteable serial text.
 ### 🛡️ Safety
 Thermal runaway protection aborts the run if the temperature climbs past your
 threshold above setpoint. On top of that, an absolute 280 °C cutoff fires even
-when the setpoint is corrupt, and it cannot be switched off. There is also
-heater-failure detection, cooling-rate limiting, and a hardware watchdog.
+when the setpoint is corrupt, and it cannot be switched off. A heater/sensor fault
+cutoff catches a dead heater or a low-reading thermocouple (the most dangerous
+failure), and a thermocouple-disagreement check catches a single bad sensor.
+Rounding it out are cooling-rate limiting and a hardware watchdog.
 
 ### 🔧 Control
 Bang-bang heater mode dramatically improves the poorly behaved T-962C heater. A
@@ -77,10 +79,11 @@ multi-probe setups.
 
 ### 📊 Monitoring and UI
 The live reflow graph shows the target curve, your temperature trace, and both
-elapsed and remaining time. When a run finishes you get analytics: peak
-temperature, time above liquidus, and the fastest ramp rate. A °C/°F toggle
-applies consistently on every screen. Rounding out the UI are stage-transition
-buzzer alerts, a fan kickstart pulse, cold-start logging, and a screensaver.
+elapsed and remaining time. When a run finishes you get analytics (peak
+temperature, time above liquidus, fastest ramp rate) plus a one-line grade of the
+run against the profile (PROFILE MET, PEAK LOW, and so on). A °C/°F toggle applies
+consistently on every screen. Rounding out the UI are stage-transition buzzer
+alerts, a fan kickstart pulse, cold-start logging, and a screensaver.
 
 ### 🔌 Serial and tooling
 The text console (115200 8N1) exposes everything: reflow, bake, profiles,

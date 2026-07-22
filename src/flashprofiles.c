@@ -16,6 +16,7 @@
 #include "flashprofiles.h"
 #include "reflow_profiles.h"
 #include "vic.h"
+#include "util.h"
 
 // IAP ROM entry point
 typedef void (*IAP)(unsigned int[], unsigned int[]);
@@ -31,8 +32,25 @@ typedef struct {
 	uint32_t magic;
 	char     name[FLASH_PROFILE_NAME_LEN];
 	uint16_t temps[48];                     // 96 bytes
-	uint8_t  _reserved[256 - 4 - FLASH_PROFILE_NAME_LEN - 96];
+	uint32_t checksum;                       // over magic+name+temps
+	uint8_t  _reserved[256 - 4 - FLASH_PROFILE_NAME_LEN - 96 - 4];
 } FlashProfileBlock_t;
+
+// Checksum over everything up to (not including) the checksum field. A block
+// with valid magic but a mismatched checksum is a half-written/corrupt block and
+// is treated as invalid, so the oven never runs garbage temperatures.
+static uint32_t flash_block_checksum(const FlashProfileBlock_t* b) {
+	size_t n = (const uint8_t*)&b->checksum - (const uint8_t*)b;
+	return rolling_checksum(b, n);
+}
+
+static int flash_block_valid(const FlashProfileBlock_t* b) {
+	if (b->magic != FLASH_PROFILE_MAGIC) return 0;
+	// 0xFFFFFFFF is the erased/legacy value: profiles written by pre-checksum
+	// firmware have no checksum, so accept them for backward compatibility.
+	if (b->checksum == 0xFFFFFFFFu) return 1;
+	return b->checksum == flash_block_checksum(b);
+}
 
 // Validity cache (scanned at init)
 static uint8_t profile_valid[FLASH_PROFILE_MAX_SLOTS];
@@ -174,10 +192,14 @@ static int rewrite_sector(int target_slot, const uint16_t* new_temps,
 		blk->magic = FLASH_PROFILE_MAGIC;
 		memcpy(blk->name, cache[i].name, FLASH_PROFILE_NAME_LEN);
 		memcpy(blk->temps, cache[i].temps, sizeof(uint16_t) * 48);
+		blk->checksum = flash_block_checksum(blk);
 
 		uint32_t addr = FLASH_PROFILE_BASE + (uint32_t)i * FLASH_PROFILE_BLOCK_SIZE;
-		if (iap_write_block(addr, flash_write_buf) != 0) {
-			printf("\n[ERROR] Flash write failed at slot %d\n", i);
+		// Write, then read the flash back and verify the checksum so a bad write
+		// is caught immediately rather than surfacing as a corrupt profile later.
+		if (iap_write_block(addr, flash_write_buf) != 0 ||
+		    !flash_block_valid(flash_profile_ptr(i))) {
+			printf("\n[ERROR] Flash write/verify failed at slot %d\n", i);
 			profile_valid[i] = 0;
 			continue;
 		}
@@ -195,10 +217,13 @@ void FlashProfiles_Init(void) {
 	profile_count = 0;
 	for (int i = 0; i < FLASH_PROFILE_MAX_SLOTS; i++) {
 		const FlashProfileBlock_t* p = flash_profile_ptr(i);
-		if (p->magic == FLASH_PROFILE_MAGIC) {
+		if (flash_block_valid(p)) {
 			profile_valid[i] = 1;
 			profile_count++;
 		} else {
+			if (p->magic == FLASH_PROFILE_MAGIC) {
+				printf("\n[FLASH] Slot %d failed checksum, ignoring", i);
+			}
 			profile_valid[i] = 0;
 		}
 	}

@@ -34,6 +34,7 @@ void Reflow_SetSetpointAtIdx(uint8_t idx, uint16_t value);
 void Reflow_DumpProfile(int profile);
 void Reflow_ExportProfile(int profile);
 void Reflow_ExportCustomProfiles(void);
+uint16_t Reflow_GetProfilePeak(void);
 void Reflow_SetProfileName(int eeIdx, const char* name);
 int Reflow_GetTotalProfileCount(void);
 int Reflow_IsFlashProfile(void);
