@@ -479,7 +479,10 @@ static int32_t Main_Work(void) {
 				Reflow_SelectProfileIdx(param);
 				printf("\nSelected profile %d: %s\n", param, Reflow_GetProfileName());
 
-			} else if (sscanf(serial_cmd, cmd_bake, &param, &param1) > 0) {
+			} else if (strncmp(serial_cmd, "bake ", 5) == 0 &&
+			           (param1 = 0, sscanf(serial_cmd, cmd_bake, &param, &param1)) >= 1) {
+				// param1 is pre-zeroed, so a one-arg 'bake 150' can never read a
+				// stale stack value as the timer. param1 > 0 => timed bake.
 				if (param < SETPOINT_MIN) {
 					printf("\nSetpoint must be >= %ddegC\n", SETPOINT_MIN);
 					param = SETPOINT_MIN;
@@ -488,17 +491,16 @@ static int32_t Main_Work(void) {
 					printf("\nSetpont must be <= %ddegC\n", SETPOINT_MAX);
 					param = SETPOINT_MAX;
 				}
-				if (param1 < 1) {
-					printf("\nTimer must be greater than 0\n");
-					param1 = 1;
-				}
 
-				if (param1 < BAKE_TIMER_MAX) {
+				if (param1 > 0) {
+					if (param1 > BAKE_TIMER_MAX) param1 = BAKE_TIMER_MAX;
 					printf("\nStarting bake with setpoint %ddegC for %ds after reaching setpoint\n", param, param1);
 					timer = param1;
 					Reflow_SetBakeTimer(timer);
 				} else {
-					printf("\nStarting bake with setpoint %ddegC\n", param);
+					printf("\nStarting untimed bake with setpoint %ddegC\n", param);
+					timer = 0;
+					Reflow_SetBakeTimer(0);
 				}
 
 				setpoint = param;
